@@ -1,0 +1,3 @@
+node_modules/
+.DS_Store
+# data.db 可以不忽略，这样您之前的题库数据就可以一起推送到云端

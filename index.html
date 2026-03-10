@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能听写 | Ebbinghaus Dictation</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-animation">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+        <div class="glow-orb orb-3"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="ri-voiceprint-line"></i>
+                <span>HearMemo</span>
+            </div>
+            <ul class="nav-links">
+                <li class="active" data-page="home-en"><i class="ri-english-input"></i> <span>英语听写</span></li>
+                <li data-page="home-zh"><i class="ri-font-color"></i> <span>语文听写</span></li>
+                <li data-page="ebbinghaus"><i class="ri-calendar-todo-line"></i> <span>复习计划</span></li>
+                <li data-page="manage" id="nav-manage" style="display: none;"><i class="ri-folder-add-line"></i>
+                    <span>词库管理</span>
+                </li>
+            </ul>
+            <div style="margin-top: auto; padding: 20px 0;">
+                <button class="btn outline w-full" id="btn-admin-login" style="font-size: 14px;"><i
+                        class="ri-admin-line"></i> 教师管理登录</button>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- English Units Page -->
+            <section id="page-home-en" class="page active">
+                <header class="page-header">
+                    <h1>英语听写</h1>
+                    <p>选择一个英语单元开始听写</p>
+                </header>
+                <div class="unit-grid" id="unit-grid-en">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </section>
+
+            <!-- Chinese Units Page -->
+            <section id="page-home-zh" class="page">
+                <header class="page-header">
+                    <h1>语文听写</h1>
+                    <p>选择一个语文单元开始听写</p>
+                </header>
+                <div class="unit-grid" id="unit-grid-zh">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </section>
+
+            <!-- Dictation Mode Page -->
+            <section id="page-dictation" class="page">
+                <div class="dictation-header">
+                    <button class="btn-icon" id="btn-exit-dictation"><i class="ri-arrow-left-line"></i> 返回</button>
+                    <h2 id="current-dictation-title">正在听写: -</h2>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="dictation-progress"></div>
+                    </div>
+                </div>
+
+                <div class="dictation-card blur-card">
+                    <div class="card-count"><span id="current-word-index">1</span> / <span
+                            id="total-word-count">10</span></div>
+
+                    <button class="btn-play-sound pulse-animation" id="btn-play-word">
+                        <i class="ri-volume-up-fill"></i>
+                    </button>
+                    <p class="sound-hint">点击重新播放发音</p>
+
+                    <div class="input-group">
+                        <input type="text" id="word-input" placeholder="输入听到的单词..." autocomplete="off"
+                            spellcheck="false" autofocus>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn primary btn-submit" id="btn-submit-word">提交 <i
+                                class="ri-send-plane-fill"></i></button>
+                        <button class="btn secondary" id="btn-skip-word">跳过 (查看答案)</button>
+                    </div>
+
+                    <div class="feedback-area" id="feedback-area" style="display: none;">
+                        <h3 id="feedback-status" class="success-text">正确！</h3>
+                        <div class="correct-answer-box">
+                            答案是: <span id="feedback-correct-word">apple</span>
+                            <div class="meaning" id="feedback-meaning">苹果</div>
+                        </div>
+                        <button class="btn primary btn-next" id="btn-next-word">下一个 <i
+                                class="ri-arrow-right-line"></i></button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Review Plan Page -->
+            <section id="page-ebbinghaus" class="page">
+                <header class="page-header">
+                    <h1>复习计划</h1>
+                    <p>基于艾宾浩斯记忆曲线，今日需要复习的错题</p>
+                </header>
+                <div class="review-stats blur-card">
+                    <div class="stat">
+                        <span class="value" id="today-review-count">0</span>
+                        <span class="label">今日待复习</span>
+                    </div>
+                    <div class="stat">
+                        <span class="value" id="total-mastered">0</span>
+                        <span class="label">已掌握</span>
+                    </div>
+                </div>
+
+                <div class="review-actions mt-4">
+                    <button class="btn primary large w-full" id="btn-start-review" disabled>开始今日复习</button>
+                </div>
+
+                <h3 class="mt-4">错题本概览</h3>
+                <div class="mistake-list" id="mistake-list">
+                    <!-- List items populated dynamically -->
+                </div>
+            </section>
+
+            <!-- Unit Management Page -->
+            <section id="page-manage" class="page">
+                <header class="page-header">
+                    <h1>词库管理</h1>
+                    <p>创建和更新听写单元</p>
+                </header>
+                <div class="manage-card blur-card">
+                    <div class="form-group">
+                        <label for="edit-unit-select">选择已有单元编辑 (可选)</label>
+                        <select id="edit-unit-select" class="form-select">
+                            <option value="">-- 创建新单元 --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="unit-title-input">单元名称</label>
+                        <input type="text" id="unit-title-input" placeholder="例如: M1U1 英语 或 第1课 语文">
+                    </div>
+                    <div class="form-group">
+                        <label>听写学科</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="unit-subject" value="en" checked>
+                                <span>英语 (听写英文)</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="unit-subject" value="zh">
+                                <span>语文 (听写中文)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="unit-words-input">词汇列表 (支持复制粘贴)</label>
+                        <textarea id="unit-words-input" rows="8"
+                            placeholder="每行一个词，格式为：&#10;apple=苹果&#10;banana=香蕉&#10;或者直接写：&#10;apple&#10;banana"></textarea>
+                    </div>
+                    <div class="action-buttons mt-4">
+                        <button class="btn primary" id="btn-save-unit"><i class="ri-save-line"></i> 保存单元</button>
+                        <button class="btn outline" id="btn-clear-form">清空</button>
+                    </div>
+                </div>
+
+                <div class="danger-zone mt-4">
+                    <h3>数据管理</h3>
+                    <p class="text-sm">您的所有数据都保存在浏览器本地。</p>
+                    <button class="btn danger mt-2" id="btn-clear-all-data"><i class="ri-delete-bin-line"></i>
+                        清除所有应用数据</button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="result-modal">
+        <div class="modal-content blur-card text-center">
+            <h2 class="mb-2" id="result-title">听写完成！</h2>
+            <div class="result-score mb-4">
+                <span class="score-number" id="result-score">100</span>
+                <span class="score-percent">%</span>
+            </div>
+            <p class="mb-4">共 <span id="idx-total-finished"></span> 词，正确 <span id="idx-correct-count"
+                    class="success-text"></span>，错误 <span id="idx-error-count" class="error-text"></span>。</p>
+            <p class="text-sm mb-4">错题已自动加入本地的艾宾浩斯复习计划。</p>
+            <button class="btn primary w-full" id="btn-close-result">返回</button>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div class="modal-overlay" id="admin-modal">
+        <div class="modal-content blur-card text-center">
+            <h2 class="mb-4">教师后台登录</h2>
+            <div class="form-group">
+                <input type="password" id="admin-password-input" placeholder="输入管理密码">
+            </div>
+            <div class="action-buttons mb-2">
+                <button class="btn outline" id="btn-close-admin-modal">取消</button>
+                <button class="btn primary" id="btn-submit-admin">登录 <i class="ri-login-circle-line"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="ebbinghaus.js"></script>
+    <script src="audio.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
