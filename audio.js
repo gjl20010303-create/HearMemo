@@ -1,5 +1,6 @@
 /**
- * 语音发音模块 (基于 网易有道在线真人/神经网络语音 API 与 Web Speech API 回退)
+ * 语音发音模块
+ * 使用 sessionId 机制，彻底解决 stop() 后异步音频仍播放的 Bug
  */
 class AudioController {
     constructor() {
@@ -8,62 +9,89 @@ class AudioController {
         this.englishVoice = null;
         this.chineseVoice = null;
 
+        // sessionId: 每次 stop() 时自增，让所有旧的异步回调知道自己已过期，不再发音
+        this.sessionId = 0;
+
+        // 缓存单一 audio 实例
+        this.audioPlayer = new Audio();
+
         this.initVoices();
         if (speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = this.initVoices.bind(this);
         }
-
-        // 缓存 audio 实例，避免重复创建引起内存泄漏
-        this.audioPlayer = new Audio();
     }
 
     initVoices() {
         this.voices = this.synth.getVoices();
         if (this.voices.length > 0) {
-            this.englishVoice = this.voices.find(v => v.lang.includes('en-US') && v.name.includes('Google')) ||
+            this.englishVoice =
+                this.voices.find(v => v.lang.includes('en-US') && v.name.includes('Google')) ||
                 this.voices.find(v => v.lang.includes('en-US')) ||
                 this.voices.find(v => v.lang.includes('en-GB'));
-            this.chineseVoice = this.voices.find(v => v.lang.includes('zh-CN')) ||
+            this.chineseVoice =
+                this.voices.find(v => v.lang.includes('zh-CN')) ||
                 this.voices.find(v => v.lang.includes('zh'));
         }
     }
 
+    /**
+     * 立即停止所有当前及即将发出的声音。
+     * 通过递增 sessionId，使所有正在进行的异步播放回调失效。
+     */
+    stop() {
+        // 递增 session，使所有挂起的异步回调失效
+        this.sessionId++;
+
+        // 立即停止 HTML Audio 元素
+        this.audioPlayer.pause();
+        this.audioPlayer.removeAttribute('src');
+        this.audioPlayer.load();
+
+        // 立即停止 Web Speech API
+        if (this.synth.speaking || this.synth.pending) {
+            this.synth.cancel();
+        }
+    }
+
+    /**
+     * 核心发音函数。用 capturedSession 快照当前 session ID。
+     * 一旦 stop() 被调用，sessionId 会变，所有回调里的 capturedSession 就会过期，从而拒绝播放。
+     */
     speak(text, isEnglish = true) {
         if (!text || text.trim() === '') return;
 
-        // 尝试使用后端的实时 Edge TTS 流
+        // 快照当前 session ID
+        const capturedSession = this.sessionId;
+
         const lang = isEnglish ? 'en' : 'zh';
-        const encodeText = encodeURIComponent(text);
-        const dynamicUrl = `/api/tts?text=${encodeText}&lang=${lang}`;
+        const encodedText = encodeURIComponent(text);
+        const apiUrl = `/api/tts?text=${encodedText}&lang=${lang}`;
 
-        this.audioPlayer.src = dynamicUrl;
+        this.audioPlayer.src = apiUrl;
 
-        // 尝试播放服务端实时音频流
-        this.audioPlayer.play().catch(e => {
-            console.warn(`Dynamic backend TTS failed for "${text}", falling back to online Youdao API...`);
-            this.speakOnline(text, isEnglish);
+        this.audioPlayer.play().catch(() => {
+            // 如果 session 已过期（stop() 被调用过），则放弃回退
+            if (this.sessionId !== capturedSession) return;
+
+            // 回退到有道在线 TTS
+            const type = isEnglish ? 2 : 0;
+            const youdaoUrl = `https://dict.youdao.com/dictvoice?type=${type}&audio=${encodedText}`;
+            this.audioPlayer.src = youdaoUrl;
+
+            this.audioPlayer.play().catch(() => {
+                // Session 再次检查
+                if (this.sessionId !== capturedSession) return;
+                this.fallbackSpeak(text, isEnglish, capturedSession);
+            });
         });
     }
 
-    speakOnline(text, isEnglish) {
-        // 作为备选：优先使用在线高品质语音接口 (有道词典真人发音/神经网络接口)
-        // type 2: 美音 (English US), type 0: 中文 (Chinese)
-        const type = isEnglish ? 2 : 0;
-        const encodeText = encodeURIComponent(text);
+    fallbackSpeak(text, isEnglish, capturedSession) {
+        // Session 检查：如果已过期则跳过
+        if (this.sessionId !== capturedSession) return;
 
-        const url = `https://dict.youdao.com/dictvoice?type=${type}&audio=${encodeText}`;
+        if (this.synth.speaking) this.synth.cancel();
 
-        this.audioPlayer.src = url;
-        this.audioPlayer.play().catch(e => {
-            console.warn('Online TTS failed, falling back to local Browser TTS...', e);
-            this.fallbackSpeak(text, isEnglish);
-        });
-    }
-
-    fallbackSpeak(text, isEnglish) {
-        if (this.synth.speaking) {
-            this.synth.cancel();
-        }
         const utterThis = new SpeechSynthesisUtterance(text);
         if (isEnglish && this.englishVoice) {
             utterThis.voice = this.englishVoice;
@@ -73,29 +101,16 @@ class AudioController {
             utterThis.lang = 'zh-CN';
         }
         utterThis.rate = 0.85;
-        utterThis.pitch = 1;
         this.synth.speak(utterThis);
     }
 
     unlockAudio() {
-        // 预加载静音解开浏览器对于 audio 的限制
-        this.audioPlayer.play().catch(() => { });
+        // 静音播放解锁浏览器音频权限
+        const silentAudio = new Audio();
+        silentAudio.play().catch(() => { });
         const utterThis = new SpeechSynthesisUtterance('');
         utterThis.volume = 0;
         this.synth.speak(utterThis);
-    }
-
-    stop() {
-        if (!this.audioPlayer.paused) {
-            this.audioPlayer.pause();
-        }
-        // 清除 src 彻底掐断音频流加载，防止后续被意外 play() 激活
-        this.audioPlayer.removeAttribute('src');
-        this.audioPlayer.load();
-
-        if (this.synth.speaking) {
-            this.synth.cancel();
-        }
     }
 }
 
