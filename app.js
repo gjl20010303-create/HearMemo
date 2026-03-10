@@ -22,21 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const unitGridEn = document.getElementById('unit-grid-en');
     const unitGridZh = document.getElementById('unit-grid-zh');
 
-    // Page: Dictation
+    // Page: Dictation & Grading
     const btnExitDictation = document.getElementById('btn-exit-dictation');
     const dictationTitle = document.getElementById('current-dictation-title');
     const progressBar = document.getElementById('dictation-progress');
     const elCurrentIdx = document.getElementById('current-word-index');
     const elTotalIdx = document.getElementById('total-word-count');
-    const wordInput = document.getElementById('word-input');
     const btnPlayWord = document.getElementById('btn-play-word');
-    const btnSubmitWord = document.getElementById('btn-submit-word');
-    const btnSkipWord = document.getElementById('btn-skip-word');
-    const feedbackArea = document.getElementById('feedback-area');
     const btnNextWord = document.getElementById('btn-next-word');
-    const feedbackStatus = document.getElementById('feedback-status');
-    const feedbackCorrectWord = document.getElementById('feedback-correct-word');
-    const feedbackMeaning = document.getElementById('feedback-meaning');
+    const btnPrevWord = document.getElementById('btn-prev-word');
+    const gradingList = document.getElementById('grading-list');
+    const btnSubmitGrades = document.getElementById('btn-submit-grades');
 
     // Page: Ebbinghaus
     const todayReviewCount = document.getElementById('today-review-count');
@@ -367,15 +363,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const wordObj = currentDictationList[currentIndex];
 
         elCurrentIdx.innerText = currentIndex + 1;
-        progressBar.style.width = `${((currentIndex) / currentDictationList.length) * 100}%`;
+        progressBar.style.width = `${(currentIndex / currentDictationList.length) * 100}%`;
 
-        wordInput.value = '';
-        wordInput.disabled = false;
-        wordInput.focus();
+        btnPrevWord.style.display = currentIndex > 0 ? 'inline-flex' : 'none';
 
-        feedbackArea.style.display = 'none';
-        btnSubmitWord.style.display = 'inline-flex';
-        btnSkipWord.style.display = 'inline-flex';
+        if (currentIndex === currentDictationList.length - 1) {
+            btnNextWord.innerHTML = '完成听写 <i class="ri-check-line"></i>';
+            btnNextWord.classList.replace('secondary', 'primary');
+        } else {
+            btnNextWord.innerHTML = '下一个词 <i class="ri-arrow-right-s-line"></i>';
+            btnNextWord.classList.replace('primary', 'secondary');
+        }
 
         // 自动发音 (轻微延迟保证体验)
         setTimeout(() => {
@@ -408,67 +406,98 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnPlayWord.addEventListener('click', playCurrentWord);
 
-    function handleSubmission(isSkip = false) {
-        const wordObj = currentDictationList[currentIndex];
-        const userInput = wordInput.value.trim().toLowerCase();
-        const correctAnswer = wordObj.word.toLowerCase();
-
-        wordInput.disabled = true;
-        btnSubmitWord.style.display = 'none';
-        btnSkipWord.style.display = 'none';
-        feedbackArea.style.display = 'block';
-
-        feedbackCorrectWord.innerText = wordObj.word;
-        feedbackMeaning.innerText = wordObj.meaning || '';
-
-        const isCorrect = !isSkip && (userInput === correctAnswer);
-
-        if (isCorrect) {
-            feedbackStatus.innerText = '完全正确！';
-            feedbackStatus.className = 'success-text';
-            dictationStats.correct++;
-
-            // 艾宾浩斯复习成功
-            if (isReviewMode) {
-                window.ebbinghaus.markReviewSuccess(wordObj.word);
-            }
-        } else {
-            feedbackStatus.innerText = isSkip ? '已跳过' : '拼写错误';
-            feedbackStatus.className = 'error-text';
-            dictationStats.error++;
-            dictationStats.mistakes.push(wordObj);
-
-            // 记录到错题本
-            const wordSubject = (isReviewMode && wordObj.subject) ? wordObj.subject : currentSubject;
-            if (isReviewMode) {
-                window.ebbinghaus.markReviewFail(wordObj.word);
-            } else {
-                window.ebbinghaus.addOrUpdateMistake(wordObj.word, wordObj.meaning, wordSubject);
-            }
+    btnPrevWord.addEventListener('click', () => {
+        if (currentIndex > 0) {
+            currentIndex--;
+            loadCurrentWord();
         }
-
-        // 更新总体进度条
-        progressBar.style.width = `${((currentIndex + 1) / currentDictationList.length) * 100}%`;
-        btnNextWord.focus();
-    }
-
-    btnSubmitWord.addEventListener('click', () => handleSubmission(false));
-    btnSkipWord.addEventListener('click', () => handleSubmission(true));
-
-    wordInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSubmission(false);
     });
 
     btnNextWord.addEventListener('click', () => {
         currentIndex++;
+        progressBar.style.width = `${(currentIndex / currentDictationList.length) * 100}%`;
         if (currentIndex >= currentDictationList.length) {
-            finishDictation();
+            finishDictationAndGrade();
         } else {
             loadCurrentWord();
         }
     });
 
-    function finishDictation() {
+    function finishDictationAndGrade() {
+        // 跳转到批改页面
+        pages.forEach(p => p.classList.remove('active'));
+        document.getElementById('page-grading').classList.add('active');
+
+        gradingList.innerHTML = '';
+        currentDictationList.forEach((wordObj, idx) => {
+            const div = document.createElement('div');
+            div.className = 'p-3 mb-2 rounded border border-gray-700 bg-gray-800 flex justify-between align-center grading-item';
+            div.style.background = 'rgba(255,255,255,0.05)';
+            div.style.borderRadius = '12px';
+            div.style.padding = '12px 16px';
+            div.style.marginBottom = '12px';
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.justifyContent = 'space-between';
+            div.style.cursor = 'pointer'; // Make the whole row clickable
+
+            div.innerHTML = `
+                <div>
+                    <span style="color:#94a3b8; margin-right:8px; font-size:14px;">${idx + 1}.</span>
+                    <strong>${wordObj.word}</strong> <span style="color:#94a3b8; font-size:14px; margin-left:8px;">${wordObj.meaning || ''}</span>
+                </div>
+                <div>
+                    <input type="checkbox" style="transform: scale(1.5); cursor:pointer;" class="mistake-checkbox" data-idx="${idx}">
+                </div>
+            `;
+
+            // Allow clicking the row to toggle the checkbox
+            div.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'INPUT') {
+                    const cb = div.querySelector('input[type="checkbox"]');
+                    cb.checked = !cb.checked;
+                }
+            });
+
+            gradingList.appendChild(div);
+        });
+    }
+
+    btnSubmitGrades.addEventListener('click', () => {
+        let errorCount = 0;
+        const checkboxes = gradingList.querySelectorAll('.mistake-checkbox');
+
+        checkboxes.forEach(cb => {
+            const idx = parseInt(cb.getAttribute('data-idx'));
+            const wordObj = currentDictationList[idx];
+            const isMistake = cb.checked;
+
+            const wordSubject = (isReviewMode && wordObj.subject) ? wordObj.subject : currentSubject;
+
+            if (isMistake) {
+                errorCount++;
+                dictationStats.error++;
+                dictationStats.mistakes.push(wordObj);
+
+                // 记录到错题本
+                if (isReviewMode) {
+                    window.ebbinghaus.markReviewFail(wordObj.word);
+                } else {
+                    window.ebbinghaus.addOrUpdateMistake(wordObj.word, wordObj.meaning, wordSubject);
+                }
+            } else {
+                dictationStats.correct++;
+                if (isReviewMode) {
+                    window.ebbinghaus.markReviewSuccess(wordObj.word);
+                }
+            }
+        });
+
+        // 提交完成，显示结果 Modal
+        showResultModal();
+    });
+
+    function showResultModal() {
         document.getElementById('idx-total-finished').innerText = currentDictationList.length;
         document.getElementById('idx-correct-count').innerText = dictationStats.correct;
         document.getElementById('idx-error-count').innerText = dictationStats.error;
@@ -476,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const score = Math.round((dictationStats.correct / currentDictationList.length) * 100);
         document.getElementById('result-score').innerText = score;
 
-        document.getElementById('result-title').innerText = isReviewMode ? "复习完成！" : "听写完成！";
+        document.getElementById('result-title').innerText = isReviewMode ? "批改完成！(复习)" : "批改完成！";
 
         resultModal.classList.add('active');
         renderEbbinghausStats(); // 刷新后台状态

@@ -31,21 +31,22 @@ class AudioController {
     speak(text, isEnglish = true) {
         if (!text || text.trim() === '') return;
 
-        // 生成与服务端一致的去特殊字符文件名
-        const filename = text.replace(/[\/\\?%*:|"<>]/g, '_').trim() + '.mp3';
-        const localUrl = `/audio/${encodeURIComponent(filename)}`;
+        // 尝试使用后端的实时 Edge TTS 流
+        const lang = isEnglish ? 'en' : 'zh';
+        const encodeText = encodeURIComponent(text);
+        const dynamicUrl = `/api/tts?text=${encodeText}&lang=${lang}`;
 
-        this.audioPlayer.src = localUrl;
+        this.audioPlayer.src = dynamicUrl;
 
-        // 尝试播放本地音频
+        // 尝试播放服务端实时音频流
         this.audioPlayer.play().catch(e => {
-            console.warn(`Local audio not found or blocked for "${text}", falling back to online TTS...`);
+            console.warn(`Dynamic backend TTS failed for "${text}", falling back to online Youdao API...`);
             this.speakOnline(text, isEnglish);
         });
     }
 
     speakOnline(text, isEnglish) {
-        // 优先使用在线高品质语音接口 (有道词典真人发音/神经网络接口)
+        // 作为备选：优先使用在线高品质语音接口 (有道词典真人发音/神经网络接口)
         // type 2: 美音 (English US), type 0: 中文 (Chinese)
         const type = isEnglish ? 2 : 0;
         const encodeText = encodeURIComponent(text);

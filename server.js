@@ -2,6 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const cors = require('cors');
+const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,16 @@ const ADMIN_KEY = process.env.ADMIN_KEY || 'gjl20010303';
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Logging Middleware
+app.use((req, res, next) => {
+    const time = new Date().toLocaleTimeString();
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    // Decode URI since we have Chinese paths
+    const decodedUrl = decodeURIComponent(req.originalUrl);
+    console.log(`[${time}] ${req.method} ${decodedUrl} - 来自 IP: ${ip}`);
+    next();
+});
 // Serve static files (the frontend) from the current directory
 app.use(express.static(path.join(__dirname)));
 
@@ -58,6 +69,38 @@ app.get('/api/units', (req, res) => {
 
         res.json(unitsDict);
     });
+});
+
+// 1.5. Dynamic Edge TTS Endpoint
+const ttsEngine = new MsEdgeTTS();
+app.get('/api/tts', async (req, res) => {
+    const { text, lang } = req.query;
+    if (!text) return res.status(400).send('Text is required');
+
+    // Choose voice based on lang param or default heuristics
+    let voice = 'en-US-AriaNeural'; // Default English
+    if (lang === 'zh' || /[\u4e00-\u9fa5]/.test(text)) {
+        voice = 'zh-CN-XiaoxiaoNeural'; // Chinese
+    }
+
+    try {
+        await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+
+        // We can stream the audio directly to the response
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Tell browsers to cache the audio
+
+        const readable = ttsEngine.toStream(text);
+        readable.pipe(res);
+
+        readable.on('error', (err) => {
+            console.error('TTS Stream Error:', err);
+            if (!res.headersSent) res.status(500).send('TTS Streaming Failed');
+        });
+    } catch (err) {
+        console.error('TTS Setup Error:', err);
+        if (!res.headersSent) res.status(500).send('TTS Setup Failed');
+    }
 });
 
 // 2. Verify Admin
@@ -120,5 +163,7 @@ app.delete('/api/units/:title', (req, res) => {
 
 // Start the server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running locally on http://localhost:${PORT}`);
+    console.log(`其他人可以通过在同一局域网访问您的 IP: http://10.210.91.188:${PORT}`);
+    console.log('--- 实时访问日志将显示在下方 ---');
 });

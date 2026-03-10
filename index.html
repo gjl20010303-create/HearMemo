@@ -81,25 +81,37 @@
                     </button>
                     <p class="sound-hint">点击重新播放发音</p>
 
-                    <div class="input-group">
-                        <input type="text" id="word-input" placeholder="输入听到的单词..." autocomplete="off"
-                            spellcheck="false" autofocus>
+                    <div class="input-group" style="display: none;">
+                        <input type="text" id="word-input" placeholder="请在纸上听写" autocomplete="off" spellcheck="false"
+                            disabled>
                     </div>
 
+                    <!-- 现在的按钮组，只需要“跳到下一个”或“上一个” -->
                     <div class="action-buttons">
-                        <button class="btn primary btn-submit" id="btn-submit-word">提交 <i
-                                class="ri-send-plane-fill"></i></button>
-                        <button class="btn secondary" id="btn-skip-word">跳过 (查看答案)</button>
+                        <button class="btn secondary" id="btn-prev-word" style="display: none;"><i
+                                class="ri-arrow-left-s-line"></i> 上一个</button>
+                        <button class="btn primary btn-next" id="btn-next-word">下一个词 <i
+                                class="ri-arrow-right-s-line"></i></button>
                     </div>
 
-                    <div class="feedback-area" id="feedback-area" style="display: none;">
-                        <h3 id="feedback-status" class="success-text">正确！</h3>
-                        <div class="correct-answer-box">
-                            答案是: <span id="feedback-correct-word">apple</span>
-                            <div class="meaning" id="feedback-meaning">苹果</div>
-                        </div>
-                        <button class="btn primary btn-next" id="btn-next-word">下一个 <i
-                                class="ri-arrow-right-line"></i></button>
+                    <!-- 隐藏不需要的即时反馈区域 -->
+                    <div class="feedback-area" id="feedback-area" style="display: none;"></div>
+                </div>
+            </section>
+
+            <!-- Grading Page (New) -->
+            <section id="page-grading" class="page">
+                <header class="page-header">
+                    <h1>听写结束：家长批改</h1>
+                    <p>对照下方内容，勾选孩子在纸上写错的单词</p>
+                </header>
+                <div class="grading-card blur-card">
+                    <div class="mistake-list" id="grading-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <div class="action-buttons mt-4">
+                        <button class="btn primary large w-full" id="btn-submit-grades"><i
+                                class="ri-check-double-line"></i> 完成批改并生成错题</button>
                     </div>
                 </div>
             </section>
