@@ -88,8 +88,11 @@ class AudioController {
     stop() {
         if (!this.audioPlayer.paused) {
             this.audioPlayer.pause();
-            this.audioPlayer.currentTime = 0;
         }
+        // 清除 src 彻底掐断音频流加载，防止后续被意外 play() 激活
+        this.audioPlayer.removeAttribute('src');
+        this.audioPlayer.load();
+
         if (this.synth.speaking) {
             this.synth.cancel();
         }

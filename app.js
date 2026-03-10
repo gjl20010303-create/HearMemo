@@ -83,8 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.audioController.stop();
             }
 
-            // 初次点击激活语音权限
-            window.audioController.unlockAudio();
+            // 仅在首次用户交互时激活语音权限，防止重复激活导致串音
+            if (!window.audioUnlocked) {
+                window.audioController.unlockAudio();
+                window.audioUnlocked = true;
+            }
         });
     });
 
