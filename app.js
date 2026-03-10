@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSubject = 'en'; // 学科
     let isReviewMode = false; // 是否为艾宾浩斯复习模式
     let adminKey = ''; // 管理员密钥
+    let audioTimeoutId = null; // 用于存储翻译延时播放的定时器
 
     let dictationStats = { correct: 0, error: 0, mistakes: [] };
 
@@ -76,7 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pageId === 'ebbinghaus') renderEbbinghausStats();
             if (pageId === 'manage') populateEditUnitSelect();
 
-            // 切换页面时停止正在播放的语音
+            // 切换页面时清除所有挂起的定时器并停止正在播放的语音
+            if (audioTimeoutId) clearTimeout(audioTimeoutId);
             if (window.audioController && typeof window.audioController.stop === 'function') {
                 window.audioController.stop();
             }
@@ -382,6 +384,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function playCurrentWord() {
+        if (audioTimeoutId) clearTimeout(audioTimeoutId);
+        if (window.audioController && typeof window.audioController.stop === 'function') {
+            window.audioController.stop();
+        }
+
         const wordObj = currentDictationList[currentIndex];
         // 如果是复习模式（mixed），从错题对象里取 subject，否则用当前单元的 subject
         const wordSubject = (isReviewMode && wordObj.subject) ? wordObj.subject : currentSubject;
@@ -389,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (wordSubject === 'en') {
             window.audioController.speak(wordObj.word, true);
             if (wordObj.meaning && wordObj.meaning.trim() !== '') {
-                setTimeout(() => {
+                audioTimeoutId = setTimeout(() => {
                     window.audioController.speak(wordObj.meaning, false);
                 }, 1200);
             }
@@ -397,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 语文：先播放中文单词，再播放英文翻译（如有）
             window.audioController.speak(wordObj.word, false);
             if (wordObj.meaning && wordObj.meaning.trim() !== '') {
-                setTimeout(() => {
+                audioTimeoutId = setTimeout(() => {
                     window.audioController.speak(wordObj.meaning, true);
                 }, 1200);
             }
