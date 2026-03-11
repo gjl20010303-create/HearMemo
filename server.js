@@ -28,7 +28,17 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname)));
 
 // ---- Database Setup ----
-const db = new sqlite3.Database(path.join(__dirname, 'data.db'), (err) => {
+// On Render: use /opt/render/project/data for persistence (attach a Disk there)
+// Locally: use current directory
+const fs = require('fs');
+const DATA_DIR = process.env.RENDER ? '/opt/render/project/data' : __dirname;
+if (process.env.RENDER && !fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+const dbPath = path.join(DATA_DIR, 'data.db');
+console.log('Database path:', dbPath);
+
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error opening database', err);
     } else {
@@ -147,12 +157,21 @@ app.get('/api/me', authenticateToken, (req, res) => {
     res.json({ username: req.user.username, grade: req.user.grade });
 });
 
-// 1. Get units — filtered by student's grade from JWT
+// 1. Get units — filtered by student's grade from JWT; admin sees all
 app.get('/api/units', authenticateToken, (req, res) => {
     const userGrade = req.user.grade;
 
-    // Return units that are 'all' grade or match the student's grade
-    db.all("SELECT * FROM units WHERE grade = 'all' OR grade = ?", [userGrade], (err, rows) => {
+    let sql, params;
+    if (userGrade === 'all') {
+        // Admin sees everything
+        sql = 'SELECT * FROM units';
+        params = [];
+    } else {
+        sql = "SELECT * FROM units WHERE grade = 'all' OR grade = ?";
+        params = [userGrade];
+    }
+
+    db.all(sql, params, (err, rows) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Failed to fetch units' });
@@ -264,6 +283,7 @@ app.delete('/api/units/:title', (req, res) => {
         return res.status(403).json({ error: 'Unauthorized' });
     }
 
+    const title = req.params.title;
     db.run('DELETE FROM units WHERE title = ?', [title], function (err) {
         if (err) {
             return res.status(500).json({ error: 'Failed to delete unit' });
