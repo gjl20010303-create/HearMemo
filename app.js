@@ -541,6 +541,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadCurrentWord() {
         const wordObj = currentDictationList[currentIndex];
 
+        // Reset hint display
+        const hintEl = document.getElementById('hint-display');
+        if (hintEl) { hintEl.style.display = 'none'; hintEl.textContent = ''; }
+
         elCurrentIdx.innerText = currentIndex + 1;
         progressBar.style.width = `${(currentIndex / currentDictationList.length) * 100}%`;
 
@@ -589,6 +593,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btnPlayWord.addEventListener('click', playCurrentWord);
+
+    // ---- AI Hint Button ----
+    const btnGetHint = document.getElementById('btn-get-hint');
+    const hintDisplay = document.getElementById('hint-display');
+
+    if (btnGetHint) {
+        btnGetHint.addEventListener('click', async () => {
+            const wordObj = currentDictationList[currentIndex];
+            if (!wordObj) return;
+
+            btnGetHint.disabled = true;
+            btnGetHint.innerHTML = '<i class="ri-loader-4-line"></i> 思考中...';
+            if (hintDisplay) hintDisplay.style.display = 'none';
+
+            try {
+                const res = await fetch(`/api/hint?word=${encodeURIComponent(wordObj.word)}`);
+                const data = await res.json();
+                if (hintDisplay) {
+                    hintDisplay.textContent = `💡 ${data.hint || '暂无提示'}`;
+                    hintDisplay.style.display = 'block';
+                }
+            } catch (e) {
+                if (hintDisplay) {
+                    hintDisplay.textContent = '💡 提示获取失败';
+                    hintDisplay.style.display = 'block';
+                }
+            }
+
+            btnGetHint.disabled = false;
+            btnGetHint.innerHTML = '<i class="ri-lightbulb-line"></i> 获取提示';
+        });
+    }
 
     btnPrevWord.addEventListener('click', () => {
         if (currentIndex > 0) {

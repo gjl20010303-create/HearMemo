@@ -10,6 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_KEY = process.env.ADMIN_KEY || 'gjl20010303';
 const JWT_SECRET = process.env.JWT_SECRET || 'hearmemo_jwt_secret_2024';
+const DEEPSEEK_KEY = process.env.DEEPSEEK_KEY || '';
 
 // Middleware
 app.use(cors());
@@ -194,23 +195,23 @@ app.get('/api/units', authenticateToken, (req, res) => {
     });
 });
 
-// 1.5. Dynamic Edge TTS — Chinese voice upgraded to YunxiNeural
-// Note: create a new MsEdgeTTS instance per request to avoid race conditions
-// when concurrent requests (e.g. word + meaning 1.2s apart) overwrite each other's voice.
+// 1.5. Dynamic Edge TTS — High quality neural voices
+// Chinese: YunyangNeural (male, news broadcaster, very clear)
+// English: AriaNeural (female, natural)
 app.get('/api/tts', async (req, res) => {
     const { text, lang } = req.query;
     if (!text) return res.status(400).send('Text is required');
 
-    let voice = 'en-US-AriaNeural';
+    let voice = 'en-US-AriaNeural'; // female English
     if (lang === 'zh' || /[\u4e00-\u9fa5]/.test(text)) {
-        voice = 'zh-CN-YunxiNeural'; // natural male Chinese voice
+        voice = 'zh-CN-YunyangNeural'; // male Chinese, news broadcaster style
     }
 
     try {
         const ttsEngine = new MsEdgeTTS();
-        await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
         res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Cache-Control', 'no-store'); // Do not cache so voice model changes apply immediately
+        res.setHeader('Cache-Control', 'no-store');
         const readable = ttsEngine.toStream(text);
         readable.pipe(res);
         readable.on('error', (err) => {
@@ -220,6 +221,39 @@ app.get('/api/tts', async (req, res) => {
     } catch (err) {
         console.error('TTS Setup Error:', err);
         if (!res.headersSent) res.status(500).send('TTS Setup Failed');
+    }
+});
+
+// 1.6. DeepSeek AI Hint — concise word meaning
+app.get('/api/hint', async (req, res) => {
+    const { word } = req.query;
+    if (!word) return res.status(400).json({ error: 'word is required' });
+    if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
+
+    try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${DEEPSEEK_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                max_tokens: 50,
+                temperature: 0.3,
+                messages: [
+                    { role: 'system', content: '你是小学语文老师。用一句极简短的话解释词语含义，帮助学生听写时联想。不超过15个字。' },
+                    { role: 'user', content: word }
+                ]
+            })
+        });
+
+        const data = await response.json();
+        const hint = data.choices?.[0]?.message?.content?.trim() || '暂无提示';
+        res.json({ hint });
+    } catch (err) {
+        console.error('DeepSeek API Error:', err);
+        res.status(500).json({ error: 'AI提示生成失败' });
     }
 });
 
