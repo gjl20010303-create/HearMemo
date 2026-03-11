@@ -8,16 +8,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentDictationList = [];
     let currentIndex = 0;
     let currentDictationTitle = '';
-    let currentSubject = 'en'; // 学科
-    let isReviewMode = false; // 是否为艾宾浩斯复习模式
-    let adminKey = ''; // 管理员密钥
-    let audioTimeoutId = null; // 用于存储翻译延时播放的定时器
+    let currentSubject = 'en';
+    let isReviewMode = false;
+    let adminKey = '';
+    let audioTimeoutId = null;
+    let authToken = localStorage.getItem('hm_token') || '';
+    let currentUser = null; // { username, grade }
 
     let dictationStats = { correct: 0, error: 0, mistakes: [] };
 
     // ---- DOM Elements ----
     const pages = document.querySelectorAll('.page');
     const navLinks = document.querySelectorAll('.nav-links li');
+    const authWall = document.getElementById('auth-wall');
+    const mainApp = document.getElementById('main-app');
 
     // Page: Home EN & ZH
     const unitGridEn = document.getElementById('unit-grid-en');
@@ -45,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editUnitSelect = document.getElementById('edit-unit-select');
     const unitTitleInput = document.getElementById('unit-title-input');
     const unitWordsInput = document.getElementById('unit-words-input');
+    const unitGradeSelect = document.getElementById('unit-grade-select');
     const btnSaveUnit = document.getElementById('btn-save-unit');
     const btnClearForm = document.getElementById('btn-clear-form');
     const btnClearAllData = document.getElementById('btn-clear-all-data');
@@ -58,10 +63,123 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCloseAdminModal = document.getElementById('btn-close-admin-modal');
     const btnSubmitAdmin = document.getElementById('btn-submit-admin');
     const navManage = document.getElementById('nav-manage');
+    const btnLogout = document.getElementById('btn-logout');
 
-    // ---- Initialization ----
-    loadUnitsFromServer();
-    renderEbbinghausStats();
+    // ---- Auth Helper ----
+    function authHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+        };
+    }
+
+    function showApp(user) {
+        currentUser = user;
+        authWall.style.display = 'none';
+        mainApp.style.display = 'flex';
+        const gradeLabel = user.grade === '4' ? '四年级' : '五年级';
+        document.getElementById('user-display-name').textContent = user.username;
+        document.getElementById('user-display-grade').textContent = gradeLabel;
+        loadUnitsFromServer();
+        renderEbbinghausStats();
+    }
+
+    function showAuthWall() {
+        mainApp.style.display = 'none';
+        authWall.style.display = 'flex';
+    }
+
+    // ---- Initialization: check token ----
+    async function init() {
+        if (!authToken) {
+            showAuthWall();
+            return;
+        }
+        try {
+            const res = await fetch('/api/me', { headers: authHeaders() });
+            if (res.ok) {
+                const user = await res.json();
+                showApp(user);
+            } else {
+                localStorage.removeItem('hm_token');
+                authToken = '';
+                showAuthWall();
+            }
+        } catch (e) {
+            showAuthWall();
+        }
+    }
+    init();
+
+    // ---- Auth Handlers ----
+    document.getElementById('btn-login').addEventListener('click', async () => {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        const errEl = document.getElementById('login-error');
+        errEl.textContent = '';
+
+        if (!username || !password) { errEl.textContent = '请填写用户名和密码'; return; }
+
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                authToken = data.token;
+                localStorage.setItem('hm_token', authToken);
+                showApp({ username: data.username, grade: data.grade });
+            } else {
+                errEl.textContent = data.error || '登录失败';
+            }
+        } catch (e) {
+            errEl.textContent = '网络错误，请稍后再试';
+        }
+    });
+
+    document.getElementById('btn-register').addEventListener('click', async () => {
+        const username = document.getElementById('reg-username').value.trim();
+        const password = document.getElementById('reg-password').value;
+        const grade = document.getElementById('reg-grade').value;
+        const errEl = document.getElementById('reg-error');
+        errEl.textContent = '';
+
+        if (!username || !password) { errEl.textContent = '请填写用户名和密码'; return; }
+        if (username.length < 2) { errEl.textContent = '用户名至少2个字符'; return; }
+        if (password.length < 4) { errEl.textContent = '密码至少4个字符'; return; }
+
+        try {
+            const res = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, grade })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                authToken = data.token;
+                localStorage.setItem('hm_token', authToken);
+                showApp({ username: data.username, grade: data.grade });
+            } else {
+                errEl.textContent = data.error || '注册失败';
+            }
+        } catch (e) {
+            errEl.textContent = '网络错误，请稍后再试';
+        }
+    });
+
+    btnLogout.addEventListener('click', () => {
+        if (confirm('确定要退出登录吗？')) {
+            localStorage.removeItem('hm_token');
+            authToken = '';
+            currentUser = null;
+            adminKey = '';
+            navManage.style.display = 'none';
+            btnAdminLogin.style.display = '';
+            showAuthWall();
+        }
+    });
 
     // ---- Navigation ----
     navLinks.forEach(link => {
@@ -129,18 +247,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Unit Management (Server Communication) ----
     async function loadUnitsFromServer() {
         try {
-            const response = await fetch('/api/units');
+            const response = await fetch('/api/units', { headers: authHeaders() });
             if (!response.ok) throw new Error('网络请求失败');
             const data = await response.json();
             units = data;
         } catch (error) {
             console.error('加载单元失败', error);
-            // Fallback gracefully handling if backend not running (e.g local index.html directly)
-            units = {
-                '后端连线失败 (仅演示)': {
-                    subject: 'en', words: [{ word: 'offline', meaning: '离线' }]
-                }
-            };
+            units = {};
         }
         renderUnitGrids();
         populateEditUnitSelect();
@@ -171,15 +284,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (parsedWords.length > 0) {
             const subjectEl = document.querySelector('input[name="unit-subject"]:checked');
             const subjectVal = subjectEl ? subjectEl.value : 'en';
+            const gradeVal = unitGradeSelect ? unitGradeSelect.value : 'all';
 
             try {
                 const res = await fetch('/api/units', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders(),
                     body: JSON.stringify({
                         adminKey: adminKey,
                         title: title,
                         subject: subjectVal,
+                        grade: gradeVal,
                         words: parsedWords
                     })
                 });
@@ -219,10 +334,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isArray = Array.isArray(unitContent);
         const wordList = isArray ? unitContent : unitContent.words;
         const subject = isArray ? 'en' : (unitContent.subject || 'en');
+        const grade = isArray ? 'all' : (unitContent.grade || 'all');
 
         unitTitleInput.value = title;
         const radio = document.querySelector(`input[name="unit-subject"][value="${subject}"]`);
         if (radio) radio.checked = true;
+        if (unitGradeSelect) unitGradeSelect.value = grade;
 
         unitWordsInput.value = wordList.map(w => w.meaning ? `${w.word}=${w.meaning}` : w.word).join('\n');
     });

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智能听写 | Ebbinghaus Dictation</title>
+    <title>智能听写 | HearMemo</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
@@ -17,7 +17,68 @@
         <div class="glow-orb orb-3"></div>
     </div>
 
-    <div class="app-container">
+    <!-- ===== AUTH PAGE (shown when not logged in) ===== -->
+    <div id="auth-wall"
+        style="display:none; position:fixed; inset:0; z-index:999; display:flex; align-items:center; justify-content:center;">
+        <div class="blur-card" style="width:100%; max-width:420px; padding:40px; margin:20px;">
+            <div style="text-align:center; margin-bottom:28px;">
+                <i class="ri-voiceprint-line" style="font-size:40px; color:#818cf8;"></i>
+                <h1 style="font-size:26px; margin-top:8px;">HearMemo 听写</h1>
+                <p style="color:#94a3b8; font-size:14px; margin-top:4px;">请登录或注册后继续</p>
+            </div>
+
+            <!-- Tab switcher -->
+            <div
+                style="display:flex; border:1px solid rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:24px;">
+                <button id="tab-login" onclick="switchAuthTab('login')"
+                    style="flex:1; padding:10px; background:rgba(129,140,248,0.2); border:none; color:#e2e8f0; cursor:pointer; font-family:inherit; font-size:15px; font-weight:600; transition:.2s;">登录</button>
+                <button id="tab-register" onclick="switchAuthTab('register')"
+                    style="flex:1; padding:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-family:inherit; font-size:15px; transition:.2s;">注册</button>
+            </div>
+
+            <!-- Login form -->
+            <div id="form-login">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="login-username" placeholder="请输入用户名" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password">
+                </div>
+                <p id="login-error" style="color:#f87171; font-size:13px; min-height:18px; margin-bottom:4px;"></p>
+                <button class="btn primary w-full" id="btn-login" style="margin-top:4px;">
+                    <i class="ri-login-circle-line"></i> 登录
+                </button>
+            </div>
+
+            <!-- Register form -->
+            <div id="form-register" style="display:none;">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="reg-username" placeholder="起一个用户名（比如你的名字）" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="reg-password" placeholder="设置密码" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>选择年级</label>
+                    <select id="reg-grade" class="form-select">
+                        <option value="4">四年级</option>
+                        <option value="5">五年级</option>
+                    </select>
+                </div>
+                <p id="reg-error" style="color:#f87171; font-size:13px; min-height:18px; margin-bottom:4px;"></p>
+                <button class="btn primary w-full" id="btn-register" style="margin-top:4px;">
+                    <i class="ri-user-add-line"></i> 注册账号
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MAIN APP (shown when logged in) ===== -->
+    <div class="app-container" id="main-app" style="display:none;">
         <!-- Sidebar Navigation -->
         <nav class="sidebar">
             <div class="logo">
@@ -33,8 +94,19 @@
                 </li>
             </ul>
             <div style="margin-top: auto; padding: 20px 0;">
-                <button class="btn outline w-full" id="btn-admin-login" style="font-size: 14px;"><i
+                <!-- User info badge -->
+                <div id="user-badge"
+                    style="background:rgba(255,255,255,0.05); border-radius:10px; padding:10px 12px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    <i class="ri-user-3-line" style="color:#818cf8;"></i>
+                    <div>
+                        <div id="user-display-name" style="font-size:13px; font-weight:600;"></div>
+                        <div id="user-display-grade" style="font-size:12px; color:#94a3b8;"></div>
+                    </div>
+                </div>
+                <button class="btn outline w-full" id="btn-admin-login" style="font-size: 14px; margin-bottom:8px;"><i
                         class="ri-admin-line"></i> 教师管理登录</button>
+                <button class="btn outline w-full" id="btn-logout" style="font-size: 14px;"><i
+                        class="ri-logout-box-line"></i> 退出登录</button>
             </div>
         </nav>
 
@@ -86,7 +158,6 @@
                             disabled>
                     </div>
 
-                    <!-- 现在的按钮组，只需要“跳到下一个”或“上一个” -->
                     <div class="action-buttons">
                         <button class="btn secondary" id="btn-prev-word" style="display: none;"><i
                                 class="ri-arrow-left-s-line"></i> 上一个</button>
@@ -94,12 +165,11 @@
                                 class="ri-arrow-right-s-line"></i></button>
                     </div>
 
-                    <!-- 隐藏不需要的即时反馈区域 -->
                     <div class="feedback-area" id="feedback-area" style="display: none;"></div>
                 </div>
             </section>
 
-            <!-- Grading Page (New) -->
+            <!-- Grading Page -->
             <section id="page-grading" class="page">
                 <header class="page-header">
                     <h1>听写结束：家长批改</h1>
@@ -107,7 +177,6 @@
                 </header>
                 <div class="grading-card blur-card">
                     <div class="mistake-list" id="grading-list">
-                        <!-- Populated dynamically -->
                     </div>
                     <div class="action-buttons mt-4">
                         <button class="btn primary large w-full" id="btn-submit-grades"><i
@@ -139,7 +208,6 @@
 
                 <h3 class="mt-4">错题本概览</h3>
                 <div class="mistake-list" id="mistake-list">
-                    <!-- List items populated dynamically -->
                 </div>
             </section>
 
@@ -174,6 +242,14 @@
                         </div>
                     </div>
                     <div class="form-group">
+                        <label for="unit-grade-select">发布给哪个年级</label>
+                        <select id="unit-grade-select" class="form-select">
+                            <option value="all">全年级通用</option>
+                            <option value="4">四年级</option>
+                            <option value="5">五年级</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label for="unit-words-input">词汇列表 (支持复制粘贴)</label>
                         <textarea id="unit-words-input" rows="8"
                             placeholder="每行一个词，格式为：&#10;apple=苹果&#10;banana=香蕉&#10;或者直接写：&#10;apple&#10;banana"></textarea>
@@ -186,9 +262,9 @@
 
                 <div class="danger-zone mt-4">
                     <h3>数据管理</h3>
-                    <p class="text-sm">您的所有数据都保存在浏览器本地。</p>
+                    <p class="text-sm">清除当前登录账号的听写进度和错题数据。</p>
                     <button class="btn danger mt-2" id="btn-clear-all-data"><i class="ri-delete-bin-line"></i>
-                        清除所有应用数据</button>
+                        清除本地复习数据</button>
                 </div>
             </section>
 
@@ -223,6 +299,20 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Auth tab switcher (inline to work before app.js loads)
+        function switchAuthTab(tab) {
+            document.getElementById('form-login').style.display = tab === 'login' ? 'block' : 'none';
+            document.getElementById('form-register').style.display = tab === 'register' ? 'block' : 'none';
+            document.getElementById('tab-login').style.background = tab === 'login' ? 'rgba(129,140,248,0.2)' : 'transparent';
+            document.getElementById('tab-login').style.color = tab === 'login' ? '#e2e8f0' : '#94a3b8';
+            document.getElementById('tab-login').style.fontWeight = tab === 'login' ? '600' : '400';
+            document.getElementById('tab-register').style.background = tab === 'register' ? 'rgba(129,140,248,0.2)' : 'transparent';
+            document.getElementById('tab-register').style.color = tab === 'register' ? '#e2e8f0' : '#94a3b8';
+            document.getElementById('tab-register').style.fontWeight = tab === 'register' ? '600' : '400';
+        }
+    </script>
 
     <script src="ebbinghaus.js"></script>
     <script src="audio.js"></script>

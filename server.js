@@ -2,13 +2,14 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Admin Key (In a real production app, use env vars, but hardcoded here for simplicity)
 const ADMIN_KEY = process.env.ADMIN_KEY || 'gjl20010303';
+const JWT_SECRET = process.env.JWT_SECRET || 'hearmemo_jwt_secret_2024';
 
 // Middleware
 app.use(cors());
@@ -18,48 +19,135 @@ app.use(express.json());
 app.use((req, res, next) => {
     const time = new Date().toLocaleTimeString();
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    // Decode URI since we have Chinese paths
     const decodedUrl = decodeURIComponent(req.originalUrl);
     console.log(`[${time}] ${req.method} ${decodedUrl} - 来自 IP: ${ip}`);
     next();
 });
-// Serve static files (the frontend) from the current directory
+
+// Serve static files from current directory
 app.use(express.static(path.join(__dirname)));
 
-// Configure SQLite Database
+// ---- Database Setup ----
 const db = new sqlite3.Database(path.join(__dirname, 'data.db'), (err) => {
     if (err) {
         console.error('Error opening database', err);
     } else {
         console.log('Connected to the SQLite database.');
-        // Create table if it doesn't exist
+
+        // Units table — add grade column if not exists
         db.run(`
             CREATE TABLE IF NOT EXISTS units (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT UNIQUE,
                 subject TEXT,
+                grade TEXT DEFAULT 'all',
                 words TEXT
+            )
+        `);
+
+        // Try to add grade column to existing tables (safe, ignores if exists)
+        db.run(`ALTER TABLE units ADD COLUMN grade TEXT DEFAULT 'all'`, () => { });
+
+        // Users table for student login
+        db.run(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                grade TEXT NOT NULL
             )
         `);
     }
 });
 
-// --- API Endpoints ---
+// ---- Auth Middleware ----
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
-// 1. Get all units
-app.get('/api/units', (req, res) => {
-    db.all('SELECT * FROM units', [], (err, rows) => {
+    if (!token) return res.status(401).json({ error: 'Unauthorized: No token provided' });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Forbidden: Invalid token' });
+        req.user = user;
+        next();
+    });
+}
+
+// ---- API Endpoints ----
+
+// Register new student
+app.post('/api/register', async (req, res) => {
+    const { username, password, grade } = req.body;
+
+    if (!username || !password || !grade) {
+        return res.status(400).json({ error: '用户名、密码和年级不能为空' });
+    }
+    if (!['4', '5'].includes(String(grade))) {
+        return res.status(400).json({ error: '年级只能是四年级(4)或五年级(5)' });
+    }
+
+    try {
+        const hash = await bcrypt.hash(password, 10);
+        db.run('INSERT INTO users (username, password_hash, grade) VALUES (?, ?, ?)',
+            [username.trim(), hash, String(grade)],
+            function (err) {
+                if (err) {
+                    if (err.message.includes('UNIQUE constraint failed')) {
+                        return res.status(409).json({ error: '该用户名已被注册，请换一个' });
+                    }
+                    return res.status(500).json({ error: '注册失败' });
+                }
+                const token = jwt.sign({ id: this.lastID, username: username.trim(), grade: String(grade) }, JWT_SECRET, { expiresIn: '30d' });
+                res.json({ success: true, token, grade: String(grade), username: username.trim() });
+            }
+        );
+    } catch (e) {
+        res.status(500).json({ error: '服务器内部错误' });
+    }
+});
+
+// Login
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: '用户名和密码不能为空' });
+    }
+
+    db.get('SELECT * FROM users WHERE username = ?', [username.trim()], async (err, user) => {
+        if (err || !user) return res.status(401).json({ error: '用户名或密码错误' });
+
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) return res.status(401).json({ error: '用户名或密码错误' });
+
+        const token = jwt.sign({ id: user.id, username: user.username, grade: user.grade }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({ success: true, token, grade: user.grade, username: user.username });
+    });
+});
+
+// Verify current token / get current user info
+app.get('/api/me', authenticateToken, (req, res) => {
+    res.json({ username: req.user.username, grade: req.user.grade });
+});
+
+// 1. Get units — filtered by student's grade from JWT
+app.get('/api/units', authenticateToken, (req, res) => {
+    const userGrade = req.user.grade;
+
+    // Return units that are 'all' grade or match the student's grade
+    db.all("SELECT * FROM units WHERE grade = 'all' OR grade = ?", [userGrade], (err, rows) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Failed to fetch units' });
         }
 
-        // Convert array of rows into a dictionary mapping keys to objects
         const unitsDict = {};
         rows.forEach(row => {
             try {
                 unitsDict[row.title] = {
                     subject: row.subject,
+                    grade: row.grade,
                     words: JSON.parse(row.words)
                 };
             } catch (e) {
@@ -71,28 +159,23 @@ app.get('/api/units', (req, res) => {
     });
 });
 
-// 1.5. Dynamic Edge TTS Endpoint
+// 1.5. Dynamic Edge TTS — Chinese voice upgraded to YunxiNeural
 const ttsEngine = new MsEdgeTTS();
 app.get('/api/tts', async (req, res) => {
     const { text, lang } = req.query;
     if (!text) return res.status(400).send('Text is required');
 
-    // Choose voice based on lang param or default heuristics
-    let voice = 'en-US-AriaNeural'; // Default English
+    let voice = 'en-US-AriaNeural';
     if (lang === 'zh' || /[\u4e00-\u9fa5]/.test(text)) {
-        voice = 'zh-CN-XiaoxiaoNeural'; // Chinese
+        voice = 'zh-CN-YunxiNeural'; // Upgraded: natural male Chinese voice
     }
 
     try {
         await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-
-        // We can stream the audio directly to the response
         res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Tell browsers to cache the audio
-
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
         const readable = ttsEngine.toStream(text);
         readable.pipe(res);
-
         readable.on('error', (err) => {
             console.error('TTS Stream Error:', err);
             if (!res.headersSent) res.status(500).send('TTS Streaming Failed');
@@ -103,7 +186,7 @@ app.get('/api/tts', async (req, res) => {
     }
 });
 
-// 2. Verify Admin
+// 2. Verify Admin (kept for backward compatibility)
 app.post('/api/verify-admin', (req, res) => {
     const { adminKey } = req.body;
     if (adminKey === ADMIN_KEY) {
@@ -113,29 +196,30 @@ app.post('/api/verify-admin', (req, res) => {
     }
 });
 
-// 3. Add or Update a unit
+// 3. Add or Update a unit (admin only, now includes grade)
 app.post('/api/units', (req, res) => {
-    const { adminKey, title, subject, words } = req.body;
+    const { adminKey, title, subject, grade, words } = req.body;
 
     if (adminKey !== ADMIN_KEY) {
         return res.status(403).json({ error: 'Unauthorized: Invalid Admin Key' });
     }
 
     if (!title || !subject || !words || !Array.isArray(words)) {
-        return res.status(400).json({ error: 'Bad Request: Missing required fields or invalid words array' });
+        return res.status(400).json({ error: 'Bad Request: Missing required fields' });
     }
 
-    // Upsert logic (Insert or Replace)
+    const unitGrade = grade || 'all';
     const wordsJson = JSON.stringify(words);
     const sql = `
-        INSERT Into units (title, subject, words)
-        VALUES (?, ?, ?)
+        INSERT INTO units (title, subject, grade, words)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(title) DO UPDATE SET
             subject = excluded.subject,
+            grade = excluded.grade,
             words = excluded.words
     `;
 
-    db.run(sql, [title, subject, wordsJson], function (err) {
+    db.run(sql, [title, subject, unitGrade, wordsJson], function (err) {
         if (err) {
             console.error('Error upserting unit', err);
             return res.status(500).json({ error: 'Failed to save unit' });
@@ -144,7 +228,7 @@ app.post('/api/units', (req, res) => {
     });
 });
 
-// 3. Delete a unit
+// 4. Delete a unit (admin only)
 app.delete('/api/units/:title', (req, res) => {
     const title = req.params.title;
     const adminKey = req.headers['x-admin-key'];
@@ -163,7 +247,6 @@ app.delete('/api/units/:title', (req, res) => {
 
 // Start the server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running locally on http://localhost:${PORT}`);
-    console.log(`其他人可以通过在同一局域网访问您的 IP: http://10.210.91.188:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
     console.log('--- 实时访问日志将显示在下方 ---');
 });
