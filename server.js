@@ -74,6 +74,22 @@ function authenticateToken(req, res, next) {
     });
 }
 
+// Helper: check whether request is from admin (adminKey in body OR admin JWT)
+function isAdminRequest(req) {
+    const bodyKey = req.body && req.body.adminKey;
+    if (bodyKey === ADMIN_KEY) return true;
+
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded.isAdmin) return true;
+        } catch (e) { }
+    }
+    return false;
+}
+
 // ---- API Endpoints ----
 
 // Register new student
@@ -212,11 +228,11 @@ app.post('/api/verify-admin', (req, res) => {
 
 // 3. Add or Update a unit (admin only, now includes grade)
 app.post('/api/units', (req, res) => {
-    const { adminKey, title, subject, grade, words } = req.body;
-
-    if (adminKey !== ADMIN_KEY) {
-        return res.status(403).json({ error: 'Unauthorized: Invalid Admin Key' });
+    if (!isAdminRequest(req)) {
+        return res.status(403).json({ error: 'Unauthorized: Admin access required' });
     }
+
+    const { title, subject, grade, words } = req.body;
 
     if (!title || !subject || !words || !Array.isArray(words)) {
         return res.status(400).json({ error: 'Bad Request: Missing required fields' });
@@ -244,10 +260,7 @@ app.post('/api/units', (req, res) => {
 
 // 4. Delete a unit (admin only)
 app.delete('/api/units/:title', (req, res) => {
-    const title = req.params.title;
-    const adminKey = req.headers['x-admin-key'];
-
-    if (adminKey !== ADMIN_KEY) {
+    if (!isAdminRequest(req)) {
         return res.status(403).json({ error: 'Unauthorized' });
     }
 

@@ -326,7 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     headers: authHeaders(),
                     body: JSON.stringify({
-                        adminKey: adminKey,
                         title: title,
                         subject: subjectVal,
                         grade: gradeVal,
