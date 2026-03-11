@@ -261,21 +261,28 @@ app.post('/api/units', (req, res) => {
 
     const unitGrade = grade || 'all';
     const wordsJson = JSON.stringify(words);
-    const sql = `
-        INSERT INTO units (title, subject, grade, words)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(title) DO UPDATE SET
-            subject = excluded.subject,
-            grade = excluded.grade,
-            words = excluded.words
-    `;
 
-    db.run(sql, [title, subject, unitGrade, wordsJson], function (err) {
+    db.get('SELECT id FROM units WHERE title = ?', [title], (err, row) => {
         if (err) {
-            console.error('Error upserting unit', err);
-            return res.status(500).json({ error: 'Failed to save unit' });
+            console.error('Error checking unit existence:', err.message);
+            return res.status(500).json({ error: `查询单元失败: ${err.message}` });
         }
-        res.json({ success: true, message: `Unit ${title} saved successfully.` });
+
+        if (row) {
+            // Update existing
+            const sql = 'UPDATE units SET subject = ?, grade = ?, words = ? WHERE title = ?';
+            db.run(sql, [subject, unitGrade, wordsJson, title], function (err) {
+                if (err) return res.status(500).json({ error: `更新单元失败: ${err.message}` });
+                res.json({ success: true, message: `Unit ${title} updated successfully.` });
+            });
+        } else {
+            // Insert new
+            const sql = 'INSERT INTO units (title, subject, grade, words) VALUES (?, ?, ?, ?)';
+            db.run(sql, [title, subject, unitGrade, wordsJson], function (err) {
+                if (err) return res.status(500).json({ error: `创建单元失败: ${err.message}` });
+                res.json({ success: true, message: `Unit ${title} created successfully.` });
+            });
+        }
     });
 });
 
