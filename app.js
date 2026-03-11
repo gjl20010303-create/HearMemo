@@ -77,9 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser = user;
         authWall.style.display = 'none';
         mainApp.style.display = 'flex';
-        const gradeLabel = user.grade === '4' ? '四年级' : '五年级';
+        const gradeLabel = user.grade === '4' ? '四年级' : user.grade === '5' ? '五年级' : '教师(全年级)';
         document.getElementById('user-display-name').textContent = user.username;
         document.getElementById('user-display-grade').textContent = gradeLabel;
+        // Auto-unlock admin view if this is an admin session
+        if (user.isAdmin) {
+            navManage.style.display = 'flex';
+        }
         loadUnitsFromServer();
         renderEbbinghausStats();
     }
@@ -99,6 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/me', { headers: authHeaders() });
             if (res.ok) {
                 const user = await res.json();
+                // Restore isAdmin flag from token payload (jwt.verify on server returns grade:'all')
+                if (user.grade === 'all') user.isAdmin = true;
                 showApp(user);
             } else {
                 localStorage.removeItem('hm_token');
@@ -176,10 +182,39 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUser = null;
             adminKey = '';
             navManage.style.display = 'none';
-            btnAdminLogin.style.display = '';
             showAuthWall();
         }
     });
+
+    // Admin login via auth wall tab
+    const btnAdminKeyLogin = document.getElementById('btn-admin-key-login');
+    if (btnAdminKeyLogin) {
+        btnAdminKeyLogin.addEventListener('click', async () => {
+            const key = document.getElementById('admin-key-input').value.trim();
+            const errEl = document.getElementById('admin-error');
+            errEl.textContent = '';
+            if (!key) { errEl.textContent = '请输入管理密码'; return; }
+
+            try {
+                const res = await fetch('/api/admin-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ adminKey: key })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    authToken = data.token;
+                    adminKey = key;
+                    localStorage.setItem('hm_token', authToken);
+                    showApp({ username: data.username, grade: data.grade, isAdmin: true });
+                } else {
+                    errEl.textContent = data.error || '登录失败';
+                }
+            } catch (e) {
+                errEl.textContent = '网络错误，请稍后再试';
+            }
+        });
+    }
 
     // ---- Navigation ----
     navLinks.forEach(link => {

@@ -293,6 +293,7 @@ body {
 }
 
 input[type="text"],
+input[type="password"],
 textarea {
     width: 100%;
     background: rgba(15, 23, 42, 0.6);

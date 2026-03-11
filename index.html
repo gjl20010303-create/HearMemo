@@ -34,17 +34,21 @@
                     style="flex:1; padding:10px; background:rgba(129,140,248,0.2); border:none; color:#e2e8f0; cursor:pointer; font-family:inherit; font-size:15px; font-weight:600; transition:.2s;">登录</button>
                 <button id="tab-register" onclick="switchAuthTab('register')"
                     style="flex:1; padding:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-family:inherit; font-size:15px; transition:.2s;">注册</button>
+                <button id="tab-admin" onclick="switchAuthTab('admin')"
+                    style="flex:1; padding:10px; background:transparent; border:none; color:#94a3b8; cursor:pointer; font-family:inherit; font-size:15px; transition:.2s;">教师</button>
             </div>
 
             <!-- Login form -->
             <div id="form-login">
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" id="login-username" placeholder="请输入用户名" autocomplete="username">
+                    <input type="text" id="login-username" class="form-input" placeholder="请输入用户名"
+                        autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password">
+                    <input type="password" id="login-password" class="form-input" placeholder="请输入密码"
+                        autocomplete="current-password">
                 </div>
                 <p id="login-error" style="color:#f87171; font-size:13px; min-height:18px; margin-bottom:4px;"></p>
                 <button class="btn primary w-full" id="btn-login" style="margin-top:4px;">
@@ -56,11 +60,13 @@
             <div id="form-register" style="display:none;">
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" id="reg-username" placeholder="起一个用户名（比如你的名字）" autocomplete="username">
+                    <input type="text" id="reg-username" class="form-input" placeholder="起一个用户名（比如你的名字）"
+                        autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" id="reg-password" placeholder="设置密码" autocomplete="new-password">
+                    <input type="password" id="reg-password" class="form-input" placeholder="设置密码"
+                        autocomplete="new-password">
                 </div>
                 <div class="form-group">
                     <label>选择年级</label>
@@ -72,6 +78,21 @@
                 <p id="reg-error" style="color:#f87171; font-size:13px; min-height:18px; margin-bottom:4px;"></p>
                 <button class="btn primary w-full" id="btn-register" style="margin-top:4px;">
                     <i class="ri-user-add-line"></i> 注册账号
+                </button>
+            </div>
+
+            <!-- Admin login form -->
+            <div id="form-admin" style="display:none;">
+                <div style="text-align:center; margin-bottom:16px; color:#94a3b8; font-size:13px;">输入教师管理密码登录，登录后可编辑词库。
+                </div>
+                <div class="form-group">
+                    <label>管理密码</label>
+                    <input type="password" id="admin-key-input" class="form-input" placeholder="请输入管理密码"
+                        autocomplete="current-password">
+                </div>
+                <p id="admin-error" style="color:#f87171; font-size:13px; min-height:18px; margin-bottom:4px;"></p>
+                <button class="btn primary w-full" id="btn-admin-key-login" style="margin-top:4px;">
+                    <i class="ri-shield-keyhole-line"></i> 进入管理模式
                 </button>
             </div>
         </div>
@@ -103,8 +124,6 @@
                         <div id="user-display-grade" style="font-size:12px; color:#94a3b8;"></div>
                     </div>
                 </div>
-                <button class="btn outline w-full" id="btn-admin-login" style="font-size: 14px; margin-bottom:8px;"><i
-                        class="ri-admin-line"></i> 教师管理登录</button>
                 <button class="btn outline w-full" id="btn-logout" style="font-size: 14px;"><i
                         class="ri-logout-box-line"></i> 退出登录</button>
             </div>
@@ -303,14 +322,15 @@
     <script>
         // Auth tab switcher (inline to work before app.js loads)
         function switchAuthTab(tab) {
-            document.getElementById('form-login').style.display = tab === 'login' ? 'block' : 'none';
-            document.getElementById('form-register').style.display = tab === 'register' ? 'block' : 'none';
-            document.getElementById('tab-login').style.background = tab === 'login' ? 'rgba(129,140,248,0.2)' : 'transparent';
-            document.getElementById('tab-login').style.color = tab === 'login' ? '#e2e8f0' : '#94a3b8';
-            document.getElementById('tab-login').style.fontWeight = tab === 'login' ? '600' : '400';
-            document.getElementById('tab-register').style.background = tab === 'register' ? 'rgba(129,140,248,0.2)' : 'transparent';
-            document.getElementById('tab-register').style.color = tab === 'register' ? '#e2e8f0' : '#94a3b8';
-            document.getElementById('tab-register').style.fontWeight = tab === 'register' ? '600' : '400';
+            ['login', 'register', 'admin'].forEach(t => {
+                const form = document.getElementById('form-' + t);
+                const btn = document.getElementById('tab-' + t);
+                if (!form || !btn) return;
+                form.style.display = t === tab ? 'block' : 'none';
+                btn.style.background = t === tab ? 'rgba(129,140,248,0.2)' : 'transparent';
+                btn.style.color = t === tab ? '#e2e8f0' : '#94a3b8';
+                btn.style.fontWeight = t === tab ? '600' : '400';
+            });
         }
     </script>
 

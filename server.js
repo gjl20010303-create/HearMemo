@@ -173,7 +173,7 @@ app.get('/api/tts', async (req, res) => {
     try {
         await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
         res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        res.setHeader('Cache-Control', 'no-store'); // Do not cache so voice model changes apply immediately
         const readable = ttsEngine.toStream(text);
         readable.pipe(res);
         readable.on('error', (err) => {
@@ -184,6 +184,20 @@ app.get('/api/tts', async (req, res) => {
         console.error('TTS Setup Error:', err);
         if (!res.headersSent) res.status(500).send('TTS Setup Failed');
     }
+});
+
+// Admin login: return a JWT with isAdmin=true and grade='all'
+app.post('/api/admin-login', async (req, res) => {
+    const { adminKey } = req.body;
+    if (adminKey !== ADMIN_KEY) {
+        return res.status(403).json({ error: '管理员密码错误' });
+    }
+    const token = jwt.sign(
+        { id: 0, username: '教师', grade: 'all', isAdmin: true },
+        JWT_SECRET,
+        { expiresIn: '90d' }
+    );
+    res.json({ success: true, token, username: '教师', grade: 'all', isAdmin: true });
 });
 
 // 2. Verify Admin (kept for backward compatibility)
