@@ -345,18 +345,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // Refresh data from server
-                await loadUnitsFromServer();
 
-                alert(`成功保存单元 ${title}，包含 ${parsedWords.length} 个单词。`);
+                // 1. 立即清空表单
                 unitTitleInput.value = '';
                 unitWordsInput.value = '';
 
+                // 2. 立即同步跳回主页（消除竞态：不等待 loadUnitsFromServer 再跳）
                 if (subjectVal === 'en') {
-                    navLinks[0].click(); // 跳回英语
+                    navLinks[0].click();
                 } else {
-                    navLinks[1].click(); // 跳回语文
+                    navLinks[1].click();
                 }
+
+                // 3. 后台刷新词库（不 await，让它在后台静默完成）
+                loadUnitsFromServer();
+
+                // 4. 提示成功
+                alert(`成功保存单元 ${title}，包含 ${parsedWords.length} 个单词。`);
             } catch (err) {
                 alert('网络请求出错: ' + err.message);
             }

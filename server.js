@@ -94,7 +94,7 @@ function isAdminRequest(req) {
     if (token) {
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
-            if (decoded.isAdmin) return true;
+            if (decoded.isAdmin || decoded.grade === 'all') return true;
         } catch (e) { }
     }
     return false;
@@ -195,17 +195,19 @@ app.get('/api/units', authenticateToken, (req, res) => {
 });
 
 // 1.5. Dynamic Edge TTS — Chinese voice upgraded to YunxiNeural
-const ttsEngine = new MsEdgeTTS();
+// Note: create a new MsEdgeTTS instance per request to avoid race conditions
+// when concurrent requests (e.g. word + meaning 1.2s apart) overwrite each other's voice.
 app.get('/api/tts', async (req, res) => {
     const { text, lang } = req.query;
     if (!text) return res.status(400).send('Text is required');
 
     let voice = 'en-US-AriaNeural';
     if (lang === 'zh' || /[\u4e00-\u9fa5]/.test(text)) {
-        voice = 'zh-CN-YunxiNeural'; // Upgraded: natural male Chinese voice
+        voice = 'zh-CN-YunxiNeural'; // natural male Chinese voice
     }
 
     try {
+        const ttsEngine = new MsEdgeTTS();
         await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
         res.setHeader('Content-Type', 'audio/mpeg');
         res.setHeader('Cache-Control', 'no-store'); // Do not cache so voice model changes apply immediately
