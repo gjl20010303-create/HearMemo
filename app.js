@@ -334,8 +334,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 if (!res.ok) {
-                    const errObj = await res.json();
-                    alert(`保存失败: ${errObj.error}`);
+                    let errorMessage = '未知错误';
+                    try {
+                        const errObj = await res.json();
+                        errorMessage = errObj.error || errObj.message || errorMessage;
+                    } catch (e) {
+                        errorMessage = await res.text() || res.statusText;
+                    }
+                    alert(`保存失败: ${errorMessage}`);
                     return;
                 }
 
@@ -503,9 +509,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         dictationStats = { correct: 0, error: 0, mistakes: [] };
 
-        // 导航到听写页面
+        // 导航到听写页面 (取消所有侧边栏高亮，因为听写页面不是侧边栏的一个tab)
         navLinks.forEach(l => l.classList.remove('active'));
-        navLinks[1].classList.add('active'); // 选中听写模式tab
         pages.forEach(p => p.classList.remove('active'));
         document.getElementById('page-dictation').classList.add('active');
 

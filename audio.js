@@ -65,7 +65,7 @@ class AudioController {
 
         const lang = isEnglish ? 'en' : 'zh';
         const encodedText = encodeURIComponent(text);
-        const apiUrl = `/api/tts?text=${encodedText}&lang=${lang}`;
+        const apiUrl = `/api/tts?text=${encodedText}&lang=${lang}&_t=${Date.now()}`;
 
         this.audioPlayer.src = apiUrl;
 
