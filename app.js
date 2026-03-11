@@ -321,6 +321,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const subjectVal = subjectEl ? subjectEl.value : 'en';
             const gradeVal = unitGradeSelect ? unitGradeSelect.value : 'all';
 
+            console.log('[Save] authToken:', authToken ? authToken.substring(0, 20) + '...' : 'EMPTY!');
+            console.log('[Save] adminKey:', adminKey || 'EMPTY');
+            console.log('[Save] Sending:', { title, subject: subjectVal, grade: gradeVal, wordCount: parsedWords.length });
+
             try {
                 const res = await fetch('/api/units', {
                     method: 'POST',
@@ -329,9 +333,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         title: title,
                         subject: subjectVal,
                         grade: gradeVal,
-                        words: parsedWords
+                        words: parsedWords,
+                        adminKey: adminKey || undefined
                     })
                 });
+                console.log('[Save] Response status:', res.status);
 
                 if (!res.ok) {
                     let errorMessage = '未知错误';
