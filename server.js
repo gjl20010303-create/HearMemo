@@ -212,9 +212,9 @@ app.get('/api/tts', async (req, res) => {
         await ttsEngine.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
         res.setHeader('Content-Type', 'audio/mpeg');
         res.setHeader('Cache-Control', 'no-store');
-        const readable = ttsEngine.toStream(text);
-        readable.pipe(res);
-        readable.on('error', (err) => {
+        const { audioStream } = ttsEngine.toStream(text);
+        audioStream.pipe(res);
+        audioStream.on('error', (err) => {
             console.error('TTS Stream Error:', err);
             if (!res.headersSent) res.status(500).send('TTS Streaming Failed');
         });
