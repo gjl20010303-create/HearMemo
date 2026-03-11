@@ -244,40 +244,47 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    btnAdminLogin.addEventListener('click', () => {
-        adminModal.classList.add('active');
-    });
+    // Old admin modal handlers (safely guarded — elements may not exist in current HTML)
+    if (btnAdminLogin) {
+        btnAdminLogin.addEventListener('click', () => {
+            if (adminModal) adminModal.classList.add('active');
+        });
+    }
 
-    btnCloseAdminModal.addEventListener('click', () => {
-        adminModal.classList.remove('active');
-        adminPasswordInput.value = '';
-    });
+    if (btnCloseAdminModal) {
+        btnCloseAdminModal.addEventListener('click', () => {
+            if (adminModal) adminModal.classList.remove('active');
+            if (adminPasswordInput) adminPasswordInput.value = '';
+        });
+    }
 
-    btnSubmitAdmin.addEventListener('click', async () => {
-        const inputKey = adminPasswordInput.value.trim();
-        if (!inputKey) return;
+    if (btnSubmitAdmin) {
+        btnSubmitAdmin.addEventListener('click', async () => {
+            if (!adminPasswordInput) return;
+            const inputKey = adminPasswordInput.value.trim();
+            if (!inputKey) return;
 
-        try {
-            // Quickly verify the key by doing a dummy auth check or just relying on a dedicated endpoint
-            const res = await fetch('/api/verify-admin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ adminKey: inputKey })
-            });
+            try {
+                const res = await fetch('/api/verify-admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ adminKey: inputKey })
+                });
 
-            if (res.ok) {
-                adminKey = inputKey;
-                navManage.style.display = 'flex';
-                adminModal.classList.remove('active');
-                alert('已进入教师管理模式！');
-                btnAdminLogin.style.display = 'none';
-            } else {
-                alert('密码错误！请求被拒绝。');
+                if (res.ok) {
+                    adminKey = inputKey;
+                    navManage.style.display = 'flex';
+                    if (adminModal) adminModal.classList.remove('active');
+                    alert('已进入教师管理模式！');
+                    if (btnAdminLogin) btnAdminLogin.style.display = 'none';
+                } else {
+                    alert('密码错误！请求被拒绝。');
+                }
+            } catch (e) {
+                alert('网络错误，无法验证密码。');
             }
-        } catch (e) {
-            alert('网络错误，无法验证密码。');
-        }
-    });
+        });
+    }
 
     // ---- Unit Management (Server Communication) ----
     async function loadUnitsFromServer() {
