@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const unitWordsInput = document.getElementById('unit-words-input');
     const unitGradeSelect = document.getElementById('unit-grade-select');
     const btnSaveUnit = document.getElementById('btn-save-unit');
+    const btnDeleteUnit = document.getElementById('btn-delete-unit');
     const btnClearForm = document.getElementById('btn-clear-form');
     const btnClearAllData = document.getElementById('btn-clear-all-data');
 
@@ -424,8 +425,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!title) {
             unitTitleInput.value = '';
             unitWordsInput.value = '';
+            if (btnDeleteUnit) btnDeleteUnit.style.display = 'none';
             return;
         }
+        if (btnDeleteUnit) btnDeleteUnit.style.display = 'inline-flex';
+        
         const unitContent = units[title];
         const isArray = Array.isArray(unitContent);
         const wordList = isArray ? unitContent : unitContent.words;
@@ -444,7 +448,39 @@ document.addEventListener('DOMContentLoaded', () => {
         editUnitSelect.value = '';
         unitTitleInput.value = '';
         unitWordsInput.value = '';
+        if (btnDeleteUnit) btnDeleteUnit.style.display = 'none';
     });
+
+    if (btnDeleteUnit) {
+        btnDeleteUnit.addEventListener('click', async () => {
+            const title = unitTitleInput.value.trim();
+            if (!title) return;
+            
+            if (!confirm(`确定要彻底删除单元 [${title}] 吗？此操作不可恢复。`)) return;
+
+            try {
+                const res = await fetch('/api/units', {
+                    method: 'DELETE',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        title: title,
+                        adminKey: adminKey || undefined
+                    })
+                });
+
+                if (res.ok) {
+                    alert('删除成功！');
+                    btnClearForm.click();
+                    loadUnitsFromServer();
+                } else {
+                    const errObj = await res.json();
+                    alert('删除失败: ' + errObj.error);
+                }
+            } catch (err) {
+                alert('网络请求出错: ' + err.message);
+            }
+        });
+    }
 
     btnClearAllData.addEventListener('click', () => {
         if (confirm('警告：这将会清除所有的听写单元、错题本和复习计划。确定吗？')) {
