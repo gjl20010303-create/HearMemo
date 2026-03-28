@@ -110,8 +110,8 @@ app.post('/api/register', async (req, res) => {
     if (!username || !password || !grade) {
         return res.status(400).json({ error: '用户名、密码和年级不能为空' });
     }
-    if (!['4', '5'].includes(String(grade))) {
-        return res.status(400).json({ error: '年级只能是四年级(4)或五年级(5)' });
+    if (!['4', '5', '9'].includes(String(grade))) {
+        return res.status(400).json({ error: '年级只能是四年级(4)、五年级(5)或九年级(9)' });
     }
 
     try {
@@ -256,6 +256,61 @@ app.get('/api/hint', async (req, res) => {
         res.status(500).json({ error: 'AI提示生成失败' });
     }
 });
+
+// 1.7. DeepSeek AI Check Meaning — check if user's typed Chinese is correct
+app.post('/api/check_meaning', async (req, res) => {
+    const { word, target_meaning, user_input } = req.body;
+    if (!word || !target_meaning || !user_input) return res.status(400).json({ error: 'Missing parameters' });
+    if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
+
+    const prompt = `你是一个严格且智能的英语老师，负责批改九年级学生的单词翻译。
+单词: ${word}
+标准答案: ${target_meaning}
+学生输入: ${user_input}
+
+请判断学生的输入：
+- 如果意思完全一致或高度接近，评定为 correct。
+- 如果意思稍微有偏差、只答对了一部分，或者是关联词性，评定为 fuzzy。
+- 如果完全错误或风马牛不相及，评定为 error。
+
+请只返回一个如下格式的JSON对象，不要输出任何其他多余文本：
+{"result": "correct|fuzzy|error"}`;
+
+    try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${DEEPSEEK_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                max_tokens: 30,
+                temperature: 0.1,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: 'You are a strict grading assistant. Output strict JSON only.' },
+                    { role: 'user', content: prompt }
+                ]
+            })
+        });
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        let result = 'error';
+        try {
+            const parsed = JSON.parse(content);
+            if (parsed.result) result = parsed.result;
+        } catch(e) {
+            console.error('JSON Parse Error for DeepSeek check_meaning:', content);
+        }
+        res.json({ result });
+    } catch (err) {
+        console.error('DeepSeek Check Meaning Error:', err);
+        res.status(500).json({ error: 'AI校验失败' });
+    }
+});
+
 
 // Admin login: return a JWT with isAdmin=true and grade='all'
 app.post('/api/admin-login', async (req, res) => {

@@ -84,6 +84,30 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user.isAdmin) {
             navManage.style.display = 'flex';
         }
+        
+        const navHomeEn = document.getElementById('nav-home-en');
+        const navHomeZh = document.getElementById('nav-home-zh');
+        const navHomeSprint = document.getElementById('nav-home-sprint');
+        const pageHomeEn = document.getElementById('page-home-en');
+        const pageHomeZh = document.getElementById('page-home-zh');
+        const pageHomeSprint = document.getElementById('page-home-sprint');
+
+        if (user.grade === '9' || user.grade === 'all') {
+            // Route B: Sprint Mode
+            if (user.grade === '9') {
+                if (navHomeEn) navHomeEn.style.display = 'none';
+                if (navHomeZh) navHomeZh.style.display = 'none';
+            }
+            if (navHomeSprint) {
+                navHomeSprint.style.display = 'flex';
+                // Activate sprint tab
+                navLinks.forEach(l => l.classList.remove('active'));
+                navHomeSprint.classList.add('active');
+            }
+            pages.forEach(p => p.classList.remove('active'));
+            if (pageHomeSprint) pageHomeSprint.classList.add('active');
+        }
+
         loadUnitsFromServer();
         renderEbbinghausStats();
     }
@@ -315,12 +339,26 @@ document.addEventListener('DOMContentLoaded', () => {
         lines.forEach(line => {
             line = line.trim();
             if (!line) return;
-            // 支持 apple=苹果 格式
+            // 支持 word=meaning[=hint:form] 格式
             const parts = line.split('=');
-            parsedWords.push({
+            const wordObj = {
                 word: parts[0].trim().toLowerCase(),
                 meaning: parts[1] ? parts[1].trim() : ''
-            });
+            };
+            if (parts[2]) {
+                const formParts = parts[2].split(':');
+                if (formParts.length === 2) {
+                    wordObj.has_form_change = true;
+                    wordObj.form_change_hint = formParts[0].trim();
+                    wordObj.form_change_word = formParts[1].trim().toLowerCase();
+                } else {
+                    // fallback if they just typed success=成功=successful
+                    wordObj.has_form_change = true;
+                    wordObj.form_change_hint = '变形';
+                    wordObj.form_change_word = parts[2].trim().toLowerCase();
+                }
+            }
+            parsedWords.push(wordObj);
         });
 
         if (parsedWords.length > 0) {
@@ -741,5 +779,254 @@ document.addEventListener('DOMContentLoaded', () => {
             navLinks[0].click();
         }
     });
+
+    // ---- Sprint Mode Logic (Route B) ----
+    let sprintList = [];
+    let sprintIndex = 0;
+    
+    const pageSprintDictation = document.getElementById('page-sprint-dictation');
+    const sprintWordDisplay = document.getElementById('sprint-word-display');
+    const btnSprintPlay = document.getElementById('btn-sprint-play');
+    
+    const sprintStepMeaning = document.getElementById('sprint-step-meaning');
+    const sprintMeaningInput = document.getElementById('sprint-meaning-input');
+    const sprintMeaningFeedback = document.getElementById('sprint-meaning-feedback');
+    const btnSprintCheckMeaning = document.getElementById('btn-sprint-check-meaning');
+    
+    const sprintStepForm = document.getElementById('sprint-step-form');
+    const sprintFormPrompt = document.getElementById('sprint-form-prompt');
+    const sprintFormInput = document.getElementById('sprint-form-input');
+    const sprintFormFeedback = document.getElementById('sprint-form-feedback');
+    const btnSprintCheckForm = document.getElementById('btn-sprint-check-form');
+    
+    const btnSprintNext = document.getElementById('btn-sprint-next');
+    const btnExitSprint = document.getElementById('btn-exit-sprint-dictation');
+    const btnStartSprint = document.getElementById('btn-start-sprint');
+    
+    if (btnStartSprint) {
+        btnStartSprint.addEventListener('click', () => {
+            const reviewItems = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
+            let allWords = [];
+            for (const unitTitle in units) {
+                if (units[unitTitle].subject === 'en') {
+                    allWords = allWords.concat(units[unitTitle].words);
+                }
+            }
+            
+            const ebData = window.ebbinghaus.data;
+            const newWords = allWords.filter(w => !ebData[w.word]);
+            
+            newWords.sort(() => Math.random() - 0.5);
+            reviewItems.sort(() => Math.random() - 0.5);
+
+            sprintList = [...reviewItems];
+            const needed = 50 - sprintList.length;
+            if (needed > 0) {
+                sprintList = sprintList.concat(newWords.slice(0, needed));
+            } else if (sprintList.length > 50) {
+                sprintList = sprintList.slice(0, 50);
+            }
+
+            if (sprintList.length === 0) {
+                alert('词库为空或今日已无复习/新词任务！');
+                return;
+            }
+
+            sprintIndex = 0;
+            const totalEl = document.getElementById('sprint-total-idx');
+            if (totalEl) totalEl.textContent = sprintList.length;
+
+            pages.forEach(p => p.classList.remove('active'));
+            if (pageSprintDictation) pageSprintDictation.classList.add('active');
+
+            loadSprintWord();
+        });
+    }
+
+    function playSprintAudio() {
+        if (sprintIndex < sprintList.length) {
+            const text = sprintList[sprintIndex].word;
+            const url = `/api/tts?text=${encodeURIComponent(text)}&lang=en&_t=${Date.now()}`;
+            const audio = new Audio(url);
+            audio.play().catch(e => console.error(e));
+        }
+    }
+
+    if (btnSprintPlay) {
+        btnSprintPlay.addEventListener('click', playSprintAudio);
+    }
+
+    function loadSprintWord() {
+        if (sprintIndex >= sprintList.length) {
+            alert('🎉 恭喜！今日冲刺完成！');
+            if (document.getElementById('nav-home-sprint')) {
+                document.getElementById('nav-home-sprint').click();
+            }
+            return;
+        }
+
+        const currentWord = sprintList[sprintIndex];
+        const curIdxEl = document.getElementById('sprint-current-idx');
+        if (curIdxEl) curIdxEl.textContent = sprintIndex + 1;
+        
+        const progEl = document.getElementById('sprint-progress');
+        if (progEl) progEl.style.width = `${(sprintIndex / sprintList.length) * 100}%`;
+        
+        if (sprintWordDisplay) sprintWordDisplay.textContent = currentWord.word.toUpperCase();
+
+        if (sprintStepMeaning) sprintStepMeaning.style.display = 'block';
+        if (sprintMeaningInput) {
+            sprintMeaningInput.value = '';
+            sprintMeaningInput.disabled = false;
+        }
+        if (sprintMeaningFeedback) sprintMeaningFeedback.innerHTML = '';
+        if (btnSprintCheckMeaning) {
+            btnSprintCheckMeaning.style.display = 'block';
+            btnSprintCheckMeaning.innerHTML = '<i class="ri-check-line"></i> 确认';
+            btnSprintCheckMeaning.disabled = false;
+        }
+
+        if (sprintStepForm) sprintStepForm.style.display = 'none';
+        if (btnSprintNext) btnSprintNext.style.display = 'none';
+
+        setTimeout(() => {
+            playSprintAudio();
+            if (sprintMeaningInput) sprintMeaningInput.focus();
+        }, 300);
+    }
+
+    if (btnSprintCheckMeaning) {
+        btnSprintCheckMeaning.addEventListener('click', async () => {
+            const inputVal = sprintMeaningInput.value.trim();
+            if (!inputVal) return;
+            
+            const currentWord = sprintList[sprintIndex];
+            
+            btnSprintCheckMeaning.disabled = true;
+            btnSprintCheckMeaning.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 校验中...';
+
+            try {
+                const res = await fetch('/api/check_meaning', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        word: currentWord.word,
+                        target_meaning: currentWord.meaning,
+                        user_input: inputVal
+                    })
+                });
+                const data = await res.json();
+                
+                if (data.result === 'correct') {
+                    sprintMeaningFeedback.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 意思准确！(标准答案: ' + currentWord.meaning + ')</span>';
+                    sprintMeaningInput.disabled = true;
+                    btnSprintCheckMeaning.style.display = 'none';
+                    
+                    if (currentWord.has_form_change) {
+                        sprintStepForm.style.display = 'block';
+                        sprintFormPrompt.innerHTML = `🎉 太棒了！写出它的 <b>${currentWord.form_change_hint}</b> 形式：`;
+                        sprintFormInput.value = '';
+                        sprintFormInput.disabled = false;
+                        sprintFormFeedback.innerHTML = '';
+                        btnSprintCheckForm.style.display = 'block';
+                        setTimeout(() => sprintFormInput.focus(), 100);
+                    } else {
+                        handleSprintResult(currentWord, true);
+                        btnSprintNext.style.display = 'block';
+                        btnSprintNext.focus();
+                    }
+                } else if (data.result === 'fuzzy') {
+                    sprintMeaningFeedback.innerHTML = '<span style="color:#d97706"><i class="ri-error-warning-fill"></i> 意思接近，但是不够准确，请再试一次。(参考: ' + currentWord.meaning + ')</span>';
+                    sprintMeaningInput.value = '';
+                    setTimeout(() => sprintMeaningInput.focus(), 100);
+                    btnSprintCheckMeaning.disabled = false;
+                    btnSprintCheckMeaning.innerHTML = '<i class="ri-check-line"></i> 确认';
+                } else {
+                    sprintMeaningFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 错误。(标准答案: ' + currentWord.meaning + ')</span>';
+                    sprintMeaningInput.disabled = true;
+                    btnSprintCheckMeaning.style.display = 'none';
+                    btnSprintNext.style.display = 'block';
+                    btnSprintNext.focus();
+                    handleSprintResult(currentWord, false);
+                }
+            } catch (e) {
+                console.error(e);
+                sprintMeaningFeedback.innerHTML = '<span style="color:#dc2626">校验失败，请重试</span>';
+                btnSprintCheckMeaning.disabled = false;
+                btnSprintCheckMeaning.innerHTML = '<i class="ri-check-line"></i> 确认';
+            }
+        });
+        
+        if (sprintMeaningInput) {
+            sprintMeaningInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') btnSprintCheckMeaning.click();
+            });
+        }
+    }
+
+    if (btnSprintCheckForm) {
+        btnSprintCheckForm.addEventListener('click', () => {
+            const inputVal = sprintFormInput.value.trim().toLowerCase();
+            if (!inputVal) return;
+            
+            const currentWord = sprintList[sprintIndex];
+            sprintFormInput.disabled = true;
+            btnSprintCheckForm.style.display = 'none';
+
+            if (inputVal === currentWord.form_change_word) {
+                sprintFormFeedback.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 完全正确！</span>';
+                handleSprintResult(currentWord, true);
+            } else {
+                sprintFormFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 拼写错误。(正确答案: ' + currentWord.form_change_word + ')</span>';
+                handleSprintResult(currentWord, false);
+            }
+            btnSprintNext.style.display = 'block';
+            btnSprintNext.focus();
+        });
+
+        if (sprintFormInput) {
+            sprintFormInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') btnSprintCheckForm.click();
+            });
+        }
+    }
+
+    function handleSprintResult(wordObj, isCorrect) {
+        const ebData = window.ebbinghaus.data[wordObj.word];
+        const isReview = !!ebData;
+
+        if (isCorrect) {
+            if (isReview) {
+                window.ebbinghaus.markReviewSuccess(wordObj.word);
+            } else {
+                window.ebbinghaus.addOrUpdateMistake(wordObj.word, wordObj.meaning, 'en');
+                window.ebbinghaus.markReviewSuccess(wordObj.word);
+            }
+        } else {
+            if (isReview) {
+                window.ebbinghaus.markReviewFail(wordObj.word);
+            } else {
+                window.ebbinghaus.addOrUpdateMistake(wordObj.word, wordObj.meaning, 'en');
+            }
+        }
+        renderEbbinghausStats();
+    }
+
+    if (btnSprintNext) {
+        btnSprintNext.addEventListener('click', () => {
+            sprintIndex++;
+            loadSprintWord();
+        });
+    }
+
+    if (btnExitSprint) {
+        btnExitSprint.addEventListener('click', () => {
+            if (confirm('确定要中断今日冲刺吗？已完成的进度已保存。')) {
+                if (document.getElementById('nav-home-sprint')) {
+                    document.getElementById('nav-home-sprint').click();
+                }
+            }
+        });
+    }
 
 });

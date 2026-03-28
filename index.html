@@ -73,6 +73,7 @@
                     <select id="reg-grade" class="form-select">
                         <option value="4">四年级</option>
                         <option value="5">五年级</option>
+                        <option value="9">九年级 (冲刺模式)</option>
                     </select>
                 </div>
                 <p id="reg-error" style="color:#f87171; font-size:13px; min-height:18px; margin-bottom:4px;"></p>
@@ -107,8 +108,9 @@
                 <span>HearMemo</span>
             </div>
             <ul class="nav-links">
-                <li class="active" data-page="home-en"><i class="ri-english-input"></i> <span>英语听写</span></li>
-                <li data-page="home-zh"><i class="ri-font-color"></i> <span>语文听写</span></li>
+                <li class="active" data-page="home-en" id="nav-home-en"><i class="ri-english-input"></i> <span>英语听写</span></li>
+                <li data-page="home-zh" id="nav-home-zh"><i class="ri-font-color"></i> <span>语文听写</span></li>
+                <li data-page="home-sprint" id="nav-home-sprint" style="display: none;"><i class="ri-rocket-line"></i> <span>冲刺大词书</span></li>
                 <li data-page="ebbinghaus"><i class="ri-calendar-todo-line"></i> <span>复习计划</span></li>
                 <li data-page="manage" id="nav-manage" style="display: none;"><i class="ri-folder-add-line"></i>
                     <span>词库管理</span>
@@ -139,6 +141,27 @@
                 </header>
                 <div class="unit-grid" id="unit-grid-en">
                     <div class="empty-state">加载中...</div>
+                </div>
+            </section>
+
+            <!-- Sprint Mode Page (Route B) -->
+            <section id="page-home-sprint" class="page">
+                <header class="page-header">
+                    <h1>中考冲刺大词书</h1>
+                    <p>全平板强互动模式，提升刷词吞吐率</p>
+                </header>
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 40px 20px; text-align:center;">
+                    <div style="width: 80px; height: 80px; background: rgba(129,140,248,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                        <i class="ri-rocket-2-fill" style="font-size: 40px; color: #818cf8;"></i>
+                    </div>
+                    <h2 style="margin-bottom: 10px; font-size: 24px;">今日冲刺任务</h2>
+                    <p style="color: #94a3b8; margin-bottom: 30px; max-width: 400px; line-height: 1.6;">包含新词与艾宾浩斯错题复习，共计 50 词。采用“看英文写中文意思”以及变形词速记方式。</p>
+                    <button class="btn primary pulse-animation" id="btn-start-sprint" style="font-size: 18px; padding: 12px 30px; border-radius: 30px;">
+                        <i class="ri-play-fill"></i> 开始今日冲刺 (50词)
+                    </button>
+                    <div id="sprint-stats-display" style="margin-top: 20px; font-size: 14px; color: #64748b;">
+                        加载中...
+                    </div>
                 </div>
             </section>
 
@@ -192,6 +215,62 @@
                     </div>
 
                     <div class="feedback-area" id="feedback-area" style="display: none;"></div>
+                </div>
+            </section>
+
+            <!-- Interactive Sprint Dictation Page (Route B) -->
+            <section id="page-sprint-dictation" class="page">
+                <div class="dictation-header">
+                    <button class="btn-icon" id="btn-exit-sprint-dictation"><i class="ri-arrow-left-line"></i> 退出冲刺</button>
+                    <div class="progress-container">
+                        <div class="progress-bar-inner" id="sprint-progress" style="width: 0%;"></div>
+                        <span style="font-size: 13px; font-weight: 600; color: #4338ca; position: absolute; right: 8px; top: 1px;">
+                            <span id="sprint-current-idx">1</span> / <span id="sprint-total-idx">50</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="dictation-card" style="margin-top: 30px; text-align: center; padding: 40px 20px;">
+                    <!-- Big English Word -->
+                    <h2 id="sprint-word-display" style="font-size: 48px; font-weight: 800; color: #1e293b; letter-spacing: 2px; margin-bottom: 20px;">
+                        ENVIRONMENT
+                    </h2>
+                    
+                    <!-- Audio Control -->
+                    <button class="btn-icon" id="btn-sprint-play" style="width: 60px; height: 60px; font-size: 28px; background: #e0e7ff; color: #4f46e5; border-radius: 50%; margin: 0 auto 30px auto;">
+                        <i class="ri-volume-up-fill"></i>
+                    </button>
+
+                    <!-- Step 1: Meaning Input -->
+                    <div id="sprint-step-meaning" style="max-width: 400px; margin: 0 auto;">
+                        <label style="display: block; font-size: 14px; color: #64748b; margin-bottom: 8px;">请输入中文含义：</label>
+                        <input type="text" id="sprint-meaning-input" class="form-input" style="font-size: 20px; text-align: center; padding: 12px;" placeholder="例：环境" autocomplete="off">
+                        
+                        <div id="sprint-meaning-feedback" style="margin-top: 10px; font-size: 14px; min-height: 20px; font-weight: 500;"></div>
+
+                        <button class="btn primary w-full" id="btn-sprint-check-meaning" style="margin-top: 20px; padding: 12px; font-size: 16px;">
+                            <i class="ri-check-line"></i> 确认
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Form Change Input (Hidden initially) -->
+                    <div id="sprint-step-form" style="max-width: 400px; margin: 0 auto; display: none;">
+                        <label id="sprint-form-prompt" style="display: block; font-size: 16px; color: #047857; margin-bottom: 15px; font-weight: bold;">
+                            🎉 太棒了！写出它的形容词形式：
+                        </label>
+                        <input type="text" id="sprint-form-input" class="form-input" style="font-size: 20px; text-align: center; padding: 12px; font-family: 'SF Pro Text', monospace;" autocomplete="off" spellcheck="false">
+                        
+                        <div id="sprint-form-feedback" style="margin-top: 10px; font-size: 14px; min-height: 20px; font-weight: 500;"></div>
+
+                        <button class="btn primary w-full" id="btn-sprint-check-form" style="margin-top: 20px; padding: 12px; font-size: 16px; background-color: #059669; border-color: #059669;">
+                            <i class="ri-check-double-line"></i> 提交变形
+                        </button>
+                    </div>
+
+                    <!-- Next Button (Hidden initially) -->
+                    <button class="btn outline w-full" id="btn-sprint-next" style="margin-top: 30px; max-width: 400px; display: none; padding: 12px; font-size: 16px; margin-left: auto; margin-right: auto;">
+                        继续下一个 <i class="ri-arrow-right-line"></i>
+                    </button>
                 </div>
             </section>
 
@@ -273,6 +352,7 @@
                             <option value="all">全年级通用</option>
                             <option value="4">四年级</option>
                             <option value="5">五年级</option>
+                            <option value="9">九年级 (大词书)</option>
                         </select>
                     </div>
                     <div class="form-group">
