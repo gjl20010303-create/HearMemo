@@ -441,7 +441,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (radio) radio.checked = true;
         if (unitGradeSelect) unitGradeSelect.value = grade;
 
-        unitWordsInput.value = wordList.map(w => w.meaning ? `${w.word}=${w.meaning}` : w.word).join('\n');
+        unitWordsInput.value = wordList.map(w => {
+            let line = w.word;
+            if (w.meaning) line += '=' + w.meaning;
+            if (w.has_form_change) line += '=' + (w.form_change_hint !== '变形' ? w.form_change_hint + ':' : '') + w.form_change_word;
+            return line;
+        }).join('\n');
     });
 
     btnClearForm.addEventListener('click', () => {
@@ -459,13 +464,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!confirm(`确定要彻底删除单元 [${title}] 吗？此操作不可恢复。`)) return;
 
             try {
-                const res = await fetch('/api/units', {
+                const res = await fetch(`/api/units/${encodeURIComponent(title)}`, {
                     method: 'DELETE',
                     headers: authHeaders(),
-                    body: JSON.stringify({
-                        title: title,
-                        adminKey: adminKey || undefined
-                    })
+                    // body optionally if we want to pass adminKey but usually JWT is enough
+                    body: JSON.stringify({ adminKey: adminKey || undefined })
                 });
 
                 if (res.ok) {
