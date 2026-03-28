@@ -847,7 +847,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const reviewItems = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
             let allWords = [];
             for (const unitTitle in units) {
-                if (units[unitTitle].subject === 'en') {
+                // EXCLUSIVELY grab Grade 9 words for the Great Wordbook
+                if (units[unitTitle].subject === 'en' && units[unitTitle].grade === '9') {
                     allWords = allWords.concat(units[unitTitle].words);
                 }
             }
