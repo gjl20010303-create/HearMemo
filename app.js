@@ -998,7 +998,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     if (currentWord.has_form_change) {
                         sprintStepForm.style.display = 'block';
-                        sprintFormPrompt.innerHTML = `🎉 太棒了！写出它的 <b>${currentWord.form_change_hint}</b> 形式：`;
+                        // 多个派生词时列出所有提示
+                        const allHints = (currentWord.transformations && currentWord.transformations.length > 1)
+                            ? currentWord.transformations.map(t => `<b>${t.part_of_speech}</b>`).join(' / ')
+                            : `<b>${currentWord.form_change_hint}</b>`;
+                        sprintFormPrompt.innerHTML = `🎉 太棒了！写出它的 ${allHints} 形式（任意一个均可）：`;
                         sprintFormInput.value = '';
                         sprintFormInput.disabled = false;
                         sprintFormFeedback.innerHTML = '';
@@ -1047,11 +1051,17 @@ document.addEventListener('DOMContentLoaded', () => {
             sprintFormInput.disabled = true;
             btnSprintCheckForm.style.display = 'none';
 
-            if (inputVal === currentWord.form_change_word) {
+            // 支持多派生词：任意一个拼写正确即可
+            const allForms = (currentWord.transformations && currentWord.transformations.length > 0)
+                ? currentWord.transformations.map(t => t.word)
+                : [currentWord.form_change_word];
+            const isCorrect = allForms.includes(inputVal);
+            if (isCorrect) {
                 sprintFormFeedback.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 完全正确！</span>';
                 handleSprintResult(currentWord, true);
             } else {
-                sprintFormFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 拼写错误。(正确答案: ' + currentWord.form_change_word + ')</span>';
+                const answerHint = allForms.join(' / ');
+                sprintFormFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 拼写错误。(正确答案: ' + answerHint + ')</span>';
                 handleSprintResult(currentWord, false);
             }
             btnSprintNext.style.display = 'block';
