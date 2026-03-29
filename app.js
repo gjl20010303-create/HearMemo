@@ -843,50 +843,59 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnStartSprint = document.getElementById('btn-start-sprint');
     
     if (btnStartSprint) {
-        btnStartSprint.addEventListener('click', () => {
-            const reviewItemsRaw = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
-            
-            // Build a map of EXCLUSIVELY Grade 9 words for the Great Wordbook
-            const grade9WordsMap = new Map();
-            for (const unitTitle in units) {
-                if (units[unitTitle].subject === 'en' && units[unitTitle].grade === '9') {
-                    units[unitTitle].words.forEach(w => grade9WordsMap.set(w.word, w));
+        btnStartSprint.addEventListener('click', async () => {
+            try {
+                // Fetch STRICTLY grade=9 words from the server — SQL level guarantee
+                const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
+                if (!resp.ok) { alert('加载词库失败，请重试'); return; }
+                const grade9Words = await resp.json();
+
+                if (grade9Words.length === 0) {
+                    alert('九年级词库为空！请先以老师身份在词库管理中添加"九年级(大词书)"单词。');
+                    return;
                 }
+
+                // Build a lookup map for enriching review items with form_change info
+                const grade9Map = new Map(grade9Words.map(w => [w.word, w]));
+
+                // Ebbinghaus review: only words that exist in Grade 9 wordbook
+                const reviewItemsRaw = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
+                const reviewItems = reviewItemsRaw
+                    .filter(item => grade9Map.has(item.word))
+                    .map(item => ({ ...grade9Map.get(item.word), ...item, ...grade9Map.get(item.word) }));
+
+                // New words = grade9 words not yet seen at all
+                const ebData = window.ebbinghaus.data;
+                const newWords = grade9Words.filter(w => !ebData[w.word]);
+
+                newWords.sort(() => Math.random() - 0.5);
+                reviewItems.sort(() => Math.random() - 0.5);
+
+                sprintList = [...reviewItems];
+                const needed = 50 - sprintList.length;
+                if (needed > 0) {
+                    sprintList = sprintList.concat(newWords.slice(0, needed));
+                } else if (sprintList.length > 50) {
+                    sprintList = sprintList.slice(0, 50);
+                }
+
+                if (sprintList.length === 0) {
+                    alert('词库为空或今日已无复习/新词任务！');
+                    return;
+                }
+
+                sprintIndex = 0;
+                const totalEl = document.getElementById('sprint-total-idx');
+                if (totalEl) totalEl.textContent = sprintList.length;
+
+                pages.forEach(p => p.classList.remove('active'));
+                if (pageSprintDictation) pageSprintDictation.classList.add('active');
+
+                loadSprintWord();
+            } catch (e) {
+                console.error(e);
+                alert('加载失败: ' + e.message);
             }
-            
-            // 1. Filter out polluted elementary words from review history
-            // 2. Enrich review items with missing form_change properties
-            const reviewItems = reviewItemsRaw
-                .filter(item => grade9WordsMap.has(item.word))
-                .map(item => ({ ...item, ...grade9WordsMap.get(item.word) }));
-            
-            const ebData = window.ebbinghaus.data;
-            const newWords = Array.from(grade9WordsMap.values()).filter(w => !ebData[w.word]);
-            
-            newWords.sort(() => Math.random() - 0.5);
-            reviewItems.sort(() => Math.random() - 0.5);
-
-            sprintList = [...reviewItems];
-            const needed = 50 - sprintList.length;
-            if (needed > 0) {
-                sprintList = sprintList.concat(newWords.slice(0, needed));
-            } else if (sprintList.length > 50) {
-                sprintList = sprintList.slice(0, 50);
-            }
-
-            if (sprintList.length === 0) {
-                alert('词库为空或今日已无复习/新词任务！');
-                return;
-            }
-
-            sprintIndex = 0;
-            const totalEl = document.getElementById('sprint-total-idx');
-            if (totalEl) totalEl.textContent = sprintList.length;
-
-            pages.forEach(p => p.classList.remove('active'));
-            if (pageSprintDictation) pageSprintDictation.classList.add('active');
-
-            loadSprintWord();
         });
     }
 

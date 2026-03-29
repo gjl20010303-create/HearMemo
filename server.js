@@ -195,6 +195,25 @@ app.get('/api/units', authenticateToken, (req, res) => {
     });
 });
 
+// 1.1 Sprint words — STRICTLY grade=9 only (no 'all', no grade 4/5)
+app.get('/api/sprint-words', authenticateToken, (req, res) => {
+    db.all("SELECT * FROM units WHERE grade = '9' AND subject = 'en'", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Failed to fetch sprint words' });
+
+        let words = [];
+        rows.forEach(row => {
+            try {
+                const parsed = JSON.parse(row.words);
+                words = words.concat(parsed);
+            } catch (e) {
+                console.error(`Error parsing unit ${row.title}`);
+            }
+        });
+
+        res.json(words);
+    });
+});
+
 // 1.5. Dynamic Edge TTS — High quality neural voices
 // Chinese: YunyangNeural (male, news broadcaster, very clear)
 // English: AriaNeural (female, natural)
