@@ -844,17 +844,24 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (btnStartSprint) {
         btnStartSprint.addEventListener('click', () => {
-            const reviewItems = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
-            let allWords = [];
+            const reviewItemsRaw = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
+            
+            // Build a map of EXCLUSIVELY Grade 9 words for the Great Wordbook
+            const grade9WordsMap = new Map();
             for (const unitTitle in units) {
-                // EXCLUSIVELY grab Grade 9 words for the Great Wordbook
                 if (units[unitTitle].subject === 'en' && units[unitTitle].grade === '9') {
-                    allWords = allWords.concat(units[unitTitle].words);
+                    units[unitTitle].words.forEach(w => grade9WordsMap.set(w.word, w));
                 }
             }
             
+            // 1. Filter out polluted elementary words from review history
+            // 2. Enrich review items with missing form_change properties
+            const reviewItems = reviewItemsRaw
+                .filter(item => grade9WordsMap.has(item.word))
+                .map(item => ({ ...item, ...grade9WordsMap.get(item.word) }));
+            
             const ebData = window.ebbinghaus.data;
-            const newWords = allWords.filter(w => !ebData[w.word]);
+            const newWords = Array.from(grade9WordsMap.values()).filter(w => !ebData[w.word]);
             
             newWords.sort(() => Math.random() - 0.5);
             reviewItems.sort(() => Math.random() - 0.5);
