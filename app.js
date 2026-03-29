@@ -340,7 +340,13 @@ document.addEventListener('DOMContentLoaded', () => {
         lines.forEach(line => {
             line = line.trim();
             if (!line) return;
-            // 支持 word=meaning[=hint:form] 格式
+            // 支持 word=meaning[=hint:form][|例句] 格式
+            const pipeIdx = line.indexOf('|');
+            let sentence = '';
+            if (pipeIdx !== -1) {
+                sentence = line.slice(pipeIdx + 1).trim();
+                line = line.slice(0, pipeIdx).trim();
+            }
             const parts = line.split('=');
             const wordObj = {
                 word: parts[0].trim().toLowerCase(),
@@ -359,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     wordObj.form_change_word = parts[2].trim().toLowerCase();
                 }
             }
+            if (sentence) wordObj.sentence = sentence;
             parsedWords.push(wordObj);
         });
 
@@ -445,6 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let line = w.word;
             if (w.meaning) line += '=' + w.meaning;
             if (w.has_form_change) line += '=' + (w.form_change_hint !== '变形' ? w.form_change_hint + ':' : '') + w.form_change_word;
+            if (w.sentence) line += '|' + w.sentence;
             return line;
         }).join('\n');
     });
@@ -929,6 +937,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (progEl) progEl.style.width = `${(sprintIndex / sprintList.length) * 100}%`;
         
         if (sprintWordDisplay) sprintWordDisplay.textContent = currentWord.word.toUpperCase();
+
+        const sprintSentenceEl = document.getElementById('sprint-sentence');
+        if (sprintSentenceEl) {
+            if (currentWord.sentence) {
+                sprintSentenceEl.textContent = currentWord.sentence;
+                sprintSentenceEl.style.display = 'block';
+            } else {
+                sprintSentenceEl.style.display = 'none';
+            }
+        }
 
         if (sprintStepMeaning) sprintStepMeaning.style.display = 'block';
         if (sprintMeaningInput) {
