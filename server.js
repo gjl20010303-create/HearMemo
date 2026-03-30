@@ -68,6 +68,23 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 grade TEXT NOT NULL
             )
         `);
+
+        // Student progress table — synced from client localStorage
+        db.run(`
+            CREATE TABLE IF NOT EXISTS student_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                grade TEXT NOT NULL,
+                total_seen INTEGER DEFAULT 0,
+                mastered INTEGER DEFAULT 0,
+                total_mistakes INTEGER DEFAULT 0,
+                today_words INTEGER DEFAULT 0,
+                today_date TEXT,
+                last_synced TEXT NOT NULL,
+                eb_snapshot TEXT
+            )
+        `);
+        db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_progress_username ON student_progress(username)`);
     }
 });
 
@@ -406,6 +423,57 @@ app.delete('/api/units/:title', (req, res) => {
             return res.status(500).json({ error: 'Failed to delete unit' });
         }
         res.json({ success: true, message: 'Unit deleted' });
+    });
+});
+
+// 5. Student syncs their progress (authenticated, any grade)
+app.post('/api/progress/sync', authenticateToken, (req, res) => {
+    const { totalSeen, mastered, totalMistakes, todayWords, todayDate, ebSnapshot } = req.body;
+    const username = req.user.username;
+    const grade = req.user.grade;
+    const lastSynced = new Date().toISOString();
+    const ebJson = ebSnapshot ? JSON.stringify(ebSnapshot) : null;
+
+    db.run(`
+        INSERT INTO student_progress (username, grade, total_seen, mastered, total_mistakes, today_words, today_date, last_synced, eb_snapshot)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            grade=excluded.grade,
+            total_seen=excluded.total_seen,
+            mastered=excluded.mastered,
+            total_mistakes=excluded.total_mistakes,
+            today_words=CASE WHEN today_date=excluded.today_date THEN excluded.today_words ELSE excluded.today_words END,
+            today_date=excluded.today_date,
+            last_synced=excluded.last_synced,
+            eb_snapshot=excluded.eb_snapshot
+    `, [username, grade, totalSeen || 0, mastered || 0, totalMistakes || 0, todayWords || 0, todayDate || '', lastSynced, ebJson],
+    function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// 6. Teacher views all students' progress (admin only)
+app.get('/api/progress/all', authenticateToken, (req, res) => {
+    if (req.user.grade !== 'all') return res.status(403).json({ error: 'Teacher only' });
+
+    db.all(`SELECT username, grade, total_seen, mastered, total_mistakes, today_words, today_date, last_synced
+            FROM student_progress ORDER BY last_synced DESC`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// 7. Teacher views one student's word-level detail (admin only)
+app.get('/api/progress/detail/:username', authenticateToken, (req, res) => {
+    if (req.user.grade !== 'all') return res.status(403).json({ error: 'Teacher only' });
+
+    db.get(`SELECT username, eb_snapshot, last_synced FROM student_progress WHERE username=?`,
+        [req.params.username], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'No data' });
+        try { row.eb_snapshot = JSON.parse(row.eb_snapshot || '{}'); } catch { row.eb_snapshot = {}; }
+        res.json(row);
     });
 });
 
