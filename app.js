@@ -876,13 +876,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ebData = window.ebbinghaus.data;
                 const newWords = grade9Words.filter(w => !ebData[w.word]);
 
-                newWords.sort(() => Math.random() - 0.5);
-                reviewItems.sort(() => Math.random() - 0.5);
+                // 用日期作为随机种子，保证同一天每次进来词序一致
+                const _d = new Date();
+                const daySeed = _d.getFullYear() * 10000 + (_d.getMonth() + 1) * 100 + _d.getDate();
+                const _rng = (seed => { let s = seed; return () => { s = Math.imul(s ^ s >>> 15, 1 | (s = s + 0x6D2B79F5 | 0)); s = s + Math.imul(s ^ s >>> 7, 61 | s) ^ s; return ((s ^ s >>> 14) >>> 0) / 4294967296; }; });
+                const seededShuffle = (arr, seed) => { const r = _rng(seed), a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+                const shuffledNew = seededShuffle(newWords, daySeed);
+                const shuffledReview = seededShuffle(reviewItems, daySeed + 1);
 
-                sprintList = [...reviewItems];
+                sprintList = [...shuffledReview];
                 const needed = 50 - sprintList.length;
                 if (needed > 0) {
-                    sprintList = sprintList.concat(newWords.slice(0, needed));
+                    sprintList = sprintList.concat(shuffledNew.slice(0, needed));
                 } else if (sprintList.length > 50) {
                     sprintList = sprintList.slice(0, 50);
                 }
