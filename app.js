@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         loadUnitsFromServer();
         renderEbbinghausStats();
+        if (user.grade === '9' || user.grade === 'all') updateSprintHomeStat();
     }
 
     function showAuthWall() {
@@ -252,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(`page-${pageId}`).classList.add('active');
 
             if (pageId.startsWith('home')) renderUnitGrids();
+            if (pageId === 'home-sprint') updateSprintHomeStat();
             if (pageId === 'ebbinghaus') renderEbbinghausStats();
             if (pageId === 'manage') populateEditUnitSelect();
 
@@ -830,6 +832,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Sprint Mode Logic (Route B) ----
     let sprintList = [];
     let sprintIndex = 0;
+
+    // Session persistence: same batch resumes on re-entry; new batch only on completion
+    const SPRINT_SESSION_KEY = 'sprintSession_v1';
+    const SPRINT_BATCH_KEY   = 'sprintBatchNum_v1';
+    const SPRINT_TOTAL_KEY   = 'grade9TotalCount_v1';
+
+    function _saveSprintSession() {
+        localStorage.setItem(SPRINT_SESSION_KEY, JSON.stringify({ list: sprintList, index: sprintIndex }));
+    }
+    function _clearSprintSession() { localStorage.removeItem(SPRINT_SESSION_KEY); }
+    function _loadSprintSession() {
+        try {
+            const s = JSON.parse(localStorage.getItem(SPRINT_SESSION_KEY) || 'null');
+            return (s && Array.isArray(s.list) && s.list.length > 0 && s.index < s.list.length) ? s : null;
+        } catch (e) { return null; }
+    }
+    function _nextBatchSeed() {
+        const n = parseInt(localStorage.getItem(SPRINT_BATCH_KEY) || '0') + 1;
+        localStorage.setItem(SPRINT_BATCH_KEY, String(n));
+        return n;
+    }
+    function _currentBatchSeed() {
+        return parseInt(localStorage.getItem(SPRINT_BATCH_KEY) || '0');
+    }
     
     const pageSprintDictation = document.getElementById('page-sprint-dictation');
     const sprintWordDisplay = document.getElementById('sprint-word-display');
@@ -853,7 +879,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnStartSprint) {
         btnStartSprint.addEventListener('click', async () => {
             try {
-                // Fetch STRICTLY grade=9 words from the server — SQL level guarantee
+                // ── 1. 尝试恢复未完成的上次会话 ──────────────────────────────
+                const saved = _loadSprintSession();
+                if (saved) {
+                    sprintList  = saved.list;
+                    sprintIndex = saved.index;
+                    const totalEl = document.getElementById('sprint-total-idx');
+                    if (totalEl) totalEl.textContent = sprintList.length;
+                    pages.forEach(p => p.classList.remove('active'));
+                    if (pageSprintDictation) pageSprintDictation.classList.add('active');
+                    loadSprintWord();
+                    return;
+                }
+
+                // ── 2. 没有未完成会话 → 生成新一批词 ────────────────────────
                 const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
                 if (!resp.ok) { alert('加载词库失败，请重试'); return; }
                 const grade9Words = await resp.json();
@@ -863,41 +902,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // Build a lookup map for enriching review items with form_change info
+                // 缓存总词数供进度条使用
+                localStorage.setItem(SPRINT_TOTAL_KEY, String(grade9Words.length));
+
                 const grade9Map = new Map(grade9Words.map(w => [w.word, w]));
 
-                // Ebbinghaus review: only words that exist in Grade 9 wordbook
+                // 艾宾浩斯复习词（仅限本次词库中出现过的）
                 const reviewItemsRaw = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
                 const reviewItems = reviewItemsRaw
                     .filter(item => grade9Map.has(item.word))
                     .map(item => ({ ...grade9Map.get(item.word), ...item, ...grade9Map.get(item.word) }));
 
-                // New words = grade9 words not yet seen at all
+                // 新词 = 从未出现在艾宾浩斯数据中的
                 const ebData = window.ebbinghaus.data;
                 const newWords = grade9Words.filter(w => !ebData[w.word]);
 
-                // 用日期作为随机种子，保证同一天每次进来词序一致
-                const _d = new Date();
-                const daySeed = _d.getFullYear() * 10000 + (_d.getMonth() + 1) * 100 + _d.getDate();
+                // 用批次编号作为随机种子（完成一批后编号+1，与日期无关）
+                const batchSeed = _nextBatchSeed();
                 const _rng = (seed => { let s = seed; return () => { s = Math.imul(s ^ s >>> 15, 1 | (s = s + 0x6D2B79F5 | 0)); s = s + Math.imul(s ^ s >>> 7, 61 | s) ^ s; return ((s ^ s >>> 14) >>> 0) / 4294967296; }; });
                 const seededShuffle = (arr, seed) => { const r = _rng(seed), a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-                const shuffledNew = seededShuffle(newWords, daySeed);
-                const shuffledReview = seededShuffle(reviewItems, daySeed + 1);
 
-                sprintList = [...shuffledReview];
+                sprintList = [...seededShuffle(reviewItems, batchSeed)];
                 const needed = 50 - sprintList.length;
-                if (needed > 0) {
-                    sprintList = sprintList.concat(shuffledNew.slice(0, needed));
-                } else if (sprintList.length > 50) {
-                    sprintList = sprintList.slice(0, 50);
-                }
+                if (needed > 0) sprintList = sprintList.concat(seededShuffle(newWords, batchSeed + 1).slice(0, needed));
+                if (sprintList.length > 50) sprintList = sprintList.slice(0, 50);
 
                 if (sprintList.length === 0) {
-                    alert('词库为空或今日已无复习/新词任务！');
+                    alert('🎉 全部词库已学完！没有新词或复习任务了。');
                     return;
                 }
 
                 sprintIndex = 0;
+                _saveSprintSession();   // 持久化新会话
+
                 const totalEl = document.getElementById('sprint-total-idx');
                 if (totalEl) totalEl.textContent = sprintList.length;
 
@@ -927,7 +964,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadSprintWord() {
         if (sprintIndex >= sprintList.length) {
-            alert('🎉 恭喜！今日冲刺完成！');
+            _clearSprintSession();   // 本批完成，清除会话
+            alert('🎉 恭喜！本组50词全部完成！明天或下次进入将自动开始下一批。');
             if (document.getElementById('nav-home-sprint')) {
                 document.getElementById('nav-home-sprint').click();
             }
@@ -1104,8 +1142,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSprintNext) {
         btnSprintNext.addEventListener('click', () => {
             sprintIndex++;
+            _saveSprintSession();   // 持久化进度
             loadSprintWord();
         });
+    }
+
+    // ── 冲刺首页：总进度统计 ────────────────────────────────────────────
+    function updateSprintHomeStat() {
+        const statsEl = document.getElementById('sprint-stats-display');
+        const btnEl   = document.getElementById('btn-start-sprint');
+        if (!statsEl) return;
+
+        const total  = parseInt(localStorage.getItem(SPRINT_TOTAL_KEY) || '0');
+        const ebData = window.ebbinghaus ? window.ebbinghaus.data : {};
+        const seen   = Object.keys(ebData).filter(w => ebData[w] && ebData[w].subject === 'en').length;
+        const pct    = total > 0 ? ((seen / total) * 100).toFixed(1) : null;
+
+        // 进度条 HTML
+        const barFill = total > 0 ? Math.round((seen / total) * 100) : 0;
+        const progressHtml = total > 0
+            ? `<div style="margin:10px auto 0; max-width:320px;">
+                 <div style="display:flex; justify-content:space-between; font-size:13px; color:#64748b; margin-bottom:4px;">
+                   <span>总词库进度</span><span>${seen} / ${total} 词 (${pct}%)</span>
+                 </div>
+                 <div style="height:8px; background:#e2e8f0; border-radius:99px; overflow:hidden;">
+                   <div style="height:100%; width:${barFill}%; background:linear-gradient(90deg,#818cf8,#6366f1); border-radius:99px; transition:width .4s;"></div>
+                 </div>
+               </div>`
+            : `<span style="color:#94a3b8; font-size:13px;">（首次点击开始后显示进度）</span>`;
+
+        // 是否有未完成的会话
+        const saved = _loadSprintSession();
+        const remaining = saved ? saved.list.length - saved.index : null;
+
+        statsEl.innerHTML = progressHtml;
+
+        if (btnEl) {
+            btnEl.innerHTML = saved
+                ? `<i class="ri-play-fill"></i> 继续本组冲刺（还剩 ${remaining} 词）`
+                : `<i class="ri-play-fill"></i> 开始新一组冲刺（50词）`;
+        }
     }
 
     if (btnExitSprint) {
