@@ -1225,6 +1225,73 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ── 生成全部30天词单（打印排期）────────────────────────────────────
+    const btnPrintAllDays = document.getElementById('btn-print-all-days');
+    if (btnPrintAllDays) {
+        btnPrintAllDays.addEventListener('click', async () => {
+            btnPrintAllDays.disabled = true;
+            btnPrintAllDays.textContent = '加载中…';
+            try {
+                const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
+                if (!resp.ok) throw new Error('加载失败');
+                const allWords = await resp.json();
+                localStorage.setItem(SPRINT_TOTAL_KEY, String(allWords.length));
+
+                const BATCH = 50;
+                const days = [];
+                for (let i = 0; i < allWords.length; i += BATCH) {
+                    days.push(allWords.slice(i, i + BATCH));
+                }
+
+                const rows = days.map((dayWords, di) => {
+                    const wordRows = dayWords.map((w, wi) =>
+                        `<tr>
+                           <td style="color:#888;width:28px">${di * BATCH + wi + 1}</td>
+                           <td style="font-weight:600">${w.word}</td>
+                           <td style="color:#555">${w.meaning || ''}</td>
+                           <td style="color:#6366f1;font-size:12px">${w.has_form_change ? (w.form_change_hint + ': ' + w.form_change_word) : ''}</td>
+                           <td style="width:80px;border-bottom:1px solid #ccc"></td>
+                         </tr>`
+                    ).join('');
+                    return `<div class="day-block">
+                              <h3 style="margin:18px 0 6px;font-size:15px;color:#4338ca;border-bottom:2px solid #4338ca;padding-bottom:4px">
+                                Day ${di + 1} &nbsp;<span style="font-weight:400;font-size:12px;color:#888">（第 ${di * BATCH + 1}–${Math.min((di + 1) * BATCH, allWords.length)} 词）</span>
+                              </h3>
+                              <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.9">
+                                <tr style="color:#aaa;font-size:11px"><th></th><th style="text-align:left">英文</th><th style="text-align:left">中文</th><th style="text-align:left">派生</th><th>听写</th></tr>
+                                ${wordRows}
+                              </table>
+                            </div>`;
+                }).join('');
+
+                const win = window.open('', '_blank');
+                win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+                  <title>中考冲刺词单 全部 ${days.length} 天</title>
+                  <style>
+                    body{font-family:system-ui,sans-serif;margin:20px 30px;color:#222}
+                    h1{font-size:20px;margin-bottom:4px}
+                    p{color:#888;font-size:13px;margin-bottom:0}
+                    .day-block{page-break-inside:avoid}
+                    @media print{.no-print{display:none}body{margin:10px 20px}}
+                  </style></head><body>
+                  <div class="no-print" style="margin-bottom:16px">
+                    <button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ 打印全部 ${days.length} 天</button>
+                    <span style="color:#888;font-size:13px;margin-left:12px">共 ${allWords.length} 词 · ${days.length} 天 · 每天 ${BATCH} 词</span>
+                  </div>
+                  <h1>中考冲刺大词书 · 全部排期</h1>
+                  <p>共 ${allWords.length} 词，分 ${days.length} 天，每天 ${BATCH} 词。最右列空白用于纸笔听写打钩。</p>
+                  ${rows}
+                </body></html>`);
+                win.document.close();
+            } catch (e) {
+                alert('生成失败: ' + e.message);
+            } finally {
+                btnPrintAllDays.disabled = false;
+                btnPrintAllDays.innerHTML = '<i class="ri-calendar-line"></i> 生成全部30天词单（打印排期）';
+            }
+        });
+    }
+
     if (btnExitSprint) {
         btnExitSprint.addEventListener('click', () => {
             if (confirm('确定要中断今日冲刺吗？已完成的进度已保存。')) {
