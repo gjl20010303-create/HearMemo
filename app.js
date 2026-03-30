@@ -917,14 +917,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ebData = window.ebbinghaus.data;
                 const newWords = grade9Words.filter(w => !ebData[w.word]);
 
-                // 用批次编号作为随机种子（完成一批后编号+1，与日期无关）
-                const batchSeed = _nextBatchSeed();
-                const _rng = (seed => { let s = seed; return () => { s = Math.imul(s ^ s >>> 15, 1 | (s = s + 0x6D2B79F5 | 0)); s = s + Math.imul(s ^ s >>> 7, 61 | s) ^ s; return ((s ^ s >>> 14) >>> 0) / 4294967296; }; });
-                const seededShuffle = (arr, seed) => { const r = _rng(seed), a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-
-                sprintList = [...seededShuffle(reviewItems, batchSeed)];
+                // 按词库原始顺序，不打乱——这样可提前打印预知词单
+                _nextBatchSeed(); // 仍然计数批次（用于统计），但不再用于乱序
+                sprintList = [...reviewItems]; // 复习词优先（按艾宾浩斯到期顺序）
                 const needed = 50 - sprintList.length;
-                if (needed > 0) sprintList = sprintList.concat(seededShuffle(newWords, batchSeed + 1).slice(0, needed));
+                if (needed > 0) sprintList = sprintList.concat(newWords.slice(0, needed)); // 新词按原始顺序
                 if (sprintList.length > 50) sprintList = sprintList.slice(0, 50);
 
                 if (sprintList.length === 0) {
@@ -1182,6 +1179,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<i class="ri-play-fill"></i> 继续本组冲刺（还剩 ${remaining} 词）`
                 : `<i class="ri-play-fill"></i> 开始新一组冲刺（50词）`;
         }
+    }
+
+    // ── 预览今日词单 ─────────────────────────────────────────────────────
+    const btnPreviewSprint = document.getElementById('btn-preview-sprint');
+    if (btnPreviewSprint) {
+        btnPreviewSprint.addEventListener('click', async () => {
+            const panel = document.getElementById('sprint-preview-panel');
+            const listEl = document.getElementById('sprint-preview-list');
+            if (!panel || !listEl) return;
+
+            // 若已有会话，直接显示保存的词单
+            const saved = _loadSprintSession();
+            let previewWords = [];
+            if (saved) {
+                previewWords = saved.list;
+            } else {
+                // 从服务器拉取并按原始顺序截取前50个未见词
+                btnPreviewSprint.disabled = true;
+                btnPreviewSprint.textContent = '加载中…';
+                try {
+                    const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
+                    if (!resp.ok) throw new Error('加载失败');
+                    const grade9Words = await resp.json();
+                    localStorage.setItem(SPRINT_TOTAL_KEY, String(grade9Words.length));
+                    const ebData = window.ebbinghaus.data;
+                    const reviewItems = window.ebbinghaus.getTodayReviewList()
+                        .filter(item => item.subject === 'en' && grade9Words.find(w => w.word === item.word));
+                    const newWords = grade9Words.filter(w => !ebData[w.word]);
+                    previewWords = [...reviewItems, ...newWords].slice(0, 50);
+                } catch (e) {
+                    alert('加载词单失败: ' + e.message);
+                } finally {
+                    btnPreviewSprint.disabled = false;
+                    btnPreviewSprint.innerHTML = '<i class="ri-file-list-line"></i> 预览今日词单（可打印）';
+                }
+            }
+
+            listEl.innerHTML = previewWords.map((w, i) =>
+                `<li><b>${w.word}</b> &nbsp;<span style="color:#94a3b8">${w.meaning || ''}</span>${w.has_form_change ? ` <span style="color:#818cf8; font-size:12px;">[${w.form_change_hint}: ${w.form_change_word}]</span>` : ''}</li>`
+            ).join('');
+
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            updateSprintHomeStat();
+        });
     }
 
     if (btnExitSprint) {

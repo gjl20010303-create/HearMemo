@@ -159,8 +159,19 @@
                     <button class="btn primary pulse-animation" id="btn-start-sprint" style="font-size: 18px; padding: 12px 30px; border-radius: 30px;">
                         <i class="ri-play-fill"></i> 开始今日冲刺 (50词)
                     </button>
+                    <button class="btn outline" id="btn-preview-sprint" style="margin-top: 12px; padding: 9px 22px; border-radius: 30px; font-size: 15px;">
+                        <i class="ri-file-list-line"></i> 预览今日词单（可打印）
+                    </button>
                     <div id="sprint-stats-display" style="margin-top: 20px; font-size: 14px; color: #64748b;">
                         加载中...
+                    </div>
+                    <!-- 词单预览区 -->
+                    <div id="sprint-preview-panel" style="display:none; margin-top:24px; width:100%; max-width:500px; text-align:left; background:rgba(255,255,255,0.05); border-radius:14px; padding:20px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <span style="font-weight:700; font-size:15px;">本组词单</span>
+                            <button onclick="window.print()" style="background:#6366f1; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px;"><i class="ri-printer-line"></i> 打印</button>
+                        </div>
+                        <ol id="sprint-preview-list" style="margin:0; padding-left:22px; line-height:2; font-size:14px;"></ol>
                     </div>
                 </div>
             </section>
