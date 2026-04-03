@@ -299,15 +299,27 @@ app.post('/api/check_meaning', async (req, res) => {
     if (!word || !target_meaning || !user_input) return res.status(400).json({ error: 'Missing parameters' });
     if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
 
-    const prompt = `你是一个严格且智能的英语老师，负责批改九年级学生的单词翻译。
+    // 清洗词性标注、括号注释等，避免 AI 把注解当作必答内容
+    const cleanMeaning = target_meaning
+        .replace(/\b(n\.|v\.|vt\.|vi\.|adj\.|adv\.|prep\.|conj\.|pron\.|interj\.|art\.)\s*/gi, '')
+        .replace(/\([A-Z]\)\s*/g, '')          // (C) (U)
+        .replace(/\(Pl\..*?\)/gi, '')          // (Pl. mice)
+        .replace(/\(=.*?\)/g, '')              // (=ad)
+        .replace(/\[.*?\]/g, '')               // [maɪs]
+        .replace(/[；;]\s*/g, '，')
+        .trim();
+
+    const prompt = `你是一个智能英语老师，批改九年级学生的单词中文翻译。
 单词: ${word}
-标准答案: ${target_meaning}
+核心含义参考: ${cleanMeaning}
 学生输入: ${user_input}
 
-请判断学生的输入：
-- 如果意思完全一致或高度接近，评定为 correct。
-- 如果意思稍微有偏差、只答对了一部分，或者是关联词性，评定为 fuzzy。
-- 如果完全错误或风马牛不相及，评定为 error。
+判断标准（宽松）：
+- correct：学生答出了核心中文意思，即使用了同义词、省略了次要义项也算正确。
+- fuzzy：学生的答案方向对但明显不够准确（如只写了模糊的上义词、或混淆了近义词）。
+- error：完全答错或与该词无关。
+
+注意：核心含义参考可能包含多个义项，学生只需答对其中主要的一个即可评为 correct。不要因为学生没有写出所有义项就降级为 fuzzy。
 
 请只返回一个如下格式的JSON对象，不要输出任何其他多余文本：
 {"result": "correct|fuzzy|error"}`;
