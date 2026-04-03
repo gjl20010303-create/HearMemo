@@ -4,6 +4,8 @@ const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const { exec } = require('child_process');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 
 const app = express();
@@ -11,6 +13,38 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_KEY = process.env.ADMIN_KEY || 'gjl20010303';
 const JWT_SECRET = process.env.JWT_SECRET || 'hearmemo_jwt_secret_2024';
 const DEEPSEEK_KEY = process.env.DEEPSEEK_KEY || '';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'hearmemo_webhook_2024';
+const DEPLOY_BRANCH = 'refs/heads/claude/ecstatic-lamport';
+const DEPLOY_DIR = '/www/wwwroot/HearMemo';
+
+// ── GitHub Webhook 自动部署（必须在 express.json() 之前注册，需要原始 body）──
+app.post('/webhook/deploy', express.raw({ type: '*/*' }), (req, res) => {
+    const sig = req.headers['x-hub-signature-256'];
+    if (!sig) return res.status(401).send('Missing signature');
+
+    const hmac = 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(req.body).digest('hex');
+    try {
+        if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(hmac))) {
+            return res.status(401).send('Invalid signature');
+        }
+    } catch { return res.status(401).send('Signature error'); }
+
+    let payload;
+    try { payload = JSON.parse(req.body.toString()); } catch { return res.status(400).send('Bad JSON'); }
+
+    if (payload.ref !== DEPLOY_BRANCH) {
+        return res.json({ skip: true, reason: `Not target branch (got ${payload.ref})` });
+    }
+
+    res.json({ ok: true, message: 'Deploy started' });
+
+    // 拉取代码文件（不覆盖 data.db）并重启
+    const cmd = `cd ${DEPLOY_DIR} && git fetch origin && git checkout origin/claude/ecstatic-lamport -- app.js index.html server.js && pm2 restart hearmemo`;
+    exec(cmd, (err, stdout, stderr) => {
+        if (err) console.error('[Deploy] Error:', err.message, stderr);
+        else console.log('[Deploy] Success:', stdout.trim());
+    });
+});
 
 // Middleware
 app.use(cors());
