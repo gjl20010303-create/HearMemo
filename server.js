@@ -282,15 +282,15 @@ app.post('/api/check_meaning', async (req, res) => {
     if (!word || !target_meaning || !user_input) return res.status(400).json({ error: 'Missing parameters' });
     if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
 
-    const prompt = `你是一个严格且智能的英语老师，负责批改九年级学生的单词翻译。
+    const prompt = `你是一个宽容且智能的英语老师，负责批改九年级学生的单词翻译，评判标准以理解为主，不要过分苛求措辞。
 单词: ${word}
 标准答案: ${target_meaning}
 学生输入: ${user_input}
 
 请判断学生的输入：
-- 如果意思完全一致或高度接近，评定为 correct。
-- 如果意思稍微有偏差、只答对了一部分，或者是关联词性，评定为 fuzzy。
-- 如果完全错误或风马牛不相及，评定为 error。
+- 如果学生的输入能体现单词的核心含义，即使用词不完全相同、有所简略或使用了同义表达，也评定为 correct。
+- 如果学生的输入只写出了极少部分意思，或与标准答案存在明显偏差，评定为 fuzzy。
+- 如果完全错误或与单词含义毫不相关，评定为 error。
 
 请只返回一个如下格式的JSON对象，不要输出任何其他多余文本：
 {"result": "correct|fuzzy|error"}`;
@@ -308,7 +308,7 @@ app.post('/api/check_meaning', async (req, res) => {
                 temperature: 0.1,
                 response_format: { type: 'json_object' },
                 messages: [
-                    { role: 'system', content: 'You are a strict grading assistant. Output strict JSON only.' },
+                    { role: 'system', content: 'You are a lenient grading assistant. Output strict JSON only.' },
                     { role: 'user', content: prompt }
                 ]
             })
