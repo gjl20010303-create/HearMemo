@@ -925,7 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ebData = window.ebbinghaus.data;
                 const newWords = grade9Words.filter(w => !ebData[w.word]);
 
-                newWords.sort(() => Math.random() - 0.5);
+                // 新词保持词书顺序（不打乱），复习词随机排列
                 reviewItems.sort(() => Math.random() - 0.5);
 
                 sprintList = [...reviewItems];
