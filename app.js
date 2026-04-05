@@ -145,6 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const user = await res.json();
                 // Restore isAdmin flag from token payload (jwt.verify on server returns grade:'all')
                 if (user.grade === 'all') user.isAdmin = true;
+                window.ebbinghaus.setAuthToken(authToken);
+                await window.ebbinghaus.loadFromServer();
                 showApp(user);
             } else {
                 localStorage.removeItem('hm_token');
@@ -176,6 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 authToken = data.token;
                 localStorage.setItem('hm_token', authToken);
+                window.ebbinghaus.setAuthToken(authToken);
+                await window.ebbinghaus.loadFromServer();
                 showApp({ username: data.username, grade: data.grade });
             } else {
                 errEl.textContent = data.error || '登录失败';
@@ -206,6 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 authToken = data.token;
                 localStorage.setItem('hm_token', authToken);
+                window.ebbinghaus.setAuthToken(authToken);
+                await window.ebbinghaus.loadFromServer();
                 showApp({ username: data.username, grade: data.grade });
             } else {
                 errEl.textContent = data.error || '注册失败';

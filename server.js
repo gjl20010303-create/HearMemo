@@ -68,6 +68,15 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 grade TEXT NOT NULL
             )
         `);
+
+        // Ebbinghaus cloud sync table (one JSON blob per user)
+        db.run(`
+            CREATE TABLE IF NOT EXISTS ebbinghaus (
+                user_id INTEGER NOT NULL PRIMARY KEY,
+                data TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL
+            )
+        `);
     }
 });
 
@@ -197,7 +206,7 @@ app.get('/api/units', authenticateToken, (req, res) => {
 
 // 1.1 Sprint words — STRICTLY grade=9 only (no 'all', no grade 4/5)
 app.get('/api/sprint-words', authenticateToken, (req, res) => {
-    db.all("SELECT * FROM units WHERE grade = '9' AND subject = 'en'", [], (err, rows) => {
+    db.all("SELECT * FROM units WHERE grade = '9' AND subject = 'en' ORDER BY id ASC", [], (err, rows) => {
         if (err) return res.status(500).json({ error: 'Failed to fetch sprint words' });
 
         let words = [];
@@ -212,6 +221,33 @@ app.get('/api/sprint-words', authenticateToken, (req, res) => {
 
         res.json(words);
     });
+});
+
+// 1.2 Get Ebbinghaus data for current user (cloud sync)
+app.get('/api/ebbinghaus', authenticateToken, (req, res) => {
+    const userId = req.user.id;
+    db.get('SELECT data FROM ebbinghaus WHERE user_id = ?', [userId], (err, row) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        let data = {};
+        if (row) { try { data = JSON.parse(row.data); } catch (e) {} }
+        res.json({ data });
+    });
+});
+
+// 1.3 Save Ebbinghaus data for current user (cloud sync)
+app.post('/api/ebbinghaus', authenticateToken, (req, res) => {
+    const userId = req.user.id;
+    const { data } = req.body;
+    if (!data || typeof data !== 'object') return res.status(400).json({ error: 'Invalid data' });
+    const now = new Date().toISOString();
+    db.run(
+        'INSERT OR REPLACE INTO ebbinghaus (user_id, data, updated_at) VALUES (?, ?, ?)',
+        [userId, JSON.stringify(data), now],
+        (err) => {
+            if (err) return res.status(500).json({ error: 'Failed to save' });
+            res.json({ success: true });
+        }
+    );
 });
 
 // 1.5. Dynamic Edge TTS — High quality neural voices
