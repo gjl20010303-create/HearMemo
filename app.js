@@ -260,6 +260,13 @@ document.addEventListener('DOMContentLoaded', () => {
     navLinks.forEach(link => {
         link.addEventListener('click', () => {
             const pageId = link.getAttribute('data-page');
+
+            // 离开冲刺答题页时自动保存断点
+            const sprintPage = document.getElementById('page-sprint-dictation');
+            if (sprintPage && sprintPage.classList.contains('active') && sprintList.length > 0) {
+                saveSprintCheckpoint();
+            }
+
             navLinks.forEach(l => l.classList.remove('active'));
             link.classList.add('active');
 
@@ -862,6 +869,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnStartSprint) {
         btnStartSprint.addEventListener('click', async () => {
             try {
+                // Check for a saved checkpoint from today
+                const cp = loadSprintCheckpoint();
+                if (cp && cp.index > 0 && cp.index < cp.list.length) {
+                    const resume = confirm(`上次背到第 ${cp.index} / ${cp.list.length} 词，是否从断点继续？\n\n点【确定】接着背，点【取消】重新开一批新词。`);
+                    if (resume) {
+                        sprintList = cp.list;
+                        sprintIndex = cp.index;
+                        const totalEl = document.getElementById('sprint-total-idx');
+                        if (totalEl) totalEl.textContent = sprintList.length;
+                        pages.forEach(p => p.classList.remove('active'));
+                        if (pageSprintDictation) pageSprintDictation.classList.add('active');
+                        loadSprintWord();
+                        return;
+                    } else {
+                        clearSprintCheckpoint();
+                    }
+                }
+
                 // Grade-based session limit: 20 words for grade 7/8, 50 for grade 9
                 const isLowerGrade = currentUser && ['7', '8'].includes(currentUser.grade);
                 const MAX_SPRINT = isLowerGrade ? 20 : 50;
@@ -950,6 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadSprintWord() {
         if (sprintIndex >= sprintList.length) {
+            clearSprintCheckpoint();
             alert('🎉 恭喜！今日冲刺完成！');
             if (document.getElementById('nav-home-sprint')) {
                 document.getElementById('nav-home-sprint').click();
@@ -1120,6 +1146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSprintNext) {
         btnSprintNext.addEventListener('click', () => {
             sprintIndex++;
+            saveSprintCheckpoint();
             loadSprintWord();
         });
     }
@@ -1127,6 +1154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnExitSprint) {
         btnExitSprint.addEventListener('click', () => {
             if (confirm('确定要中断今日冲刺吗？已完成的进度已保存。')) {
+                saveSprintCheckpoint();
                 if (document.getElementById('nav-home-sprint')) {
                     document.getElementById('nav-home-sprint').click();
                 }
@@ -1301,6 +1329,29 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             statsEl.innerHTML = `今日待复习 <strong>${reviewCount}</strong> 词`;
         }
+    }
+
+    // ---- Sprint Checkpoint (断点续背) ----
+    const SPRINT_CHECKPOINT_KEY = 'hearmemo_sprint_checkpoint';
+
+    function saveSprintCheckpoint() {
+        if (sprintList.length === 0) return;
+        const today = window.ebbinghaus.formatDate(new Date());
+        localStorage.setItem(SPRINT_CHECKPOINT_KEY, JSON.stringify({ date: today, list: sprintList, index: sprintIndex }));
+    }
+
+    function clearSprintCheckpoint() {
+        localStorage.removeItem(SPRINT_CHECKPOINT_KEY);
+    }
+
+    function loadSprintCheckpoint() {
+        try {
+            const cp = JSON.parse(localStorage.getItem(SPRINT_CHECKPOINT_KEY) || 'null');
+            if (!cp) return null;
+            const today = window.ebbinghaus.formatDate(new Date());
+            if (cp.date !== today) { clearSprintCheckpoint(); return null; }
+            return cp;
+        } catch (e) { return null; }
     }
 
 });
