@@ -104,6 +104,27 @@ body {
 }
 
 /* Glassmorphism Classes */
+.auth-wall-container {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+}
+
+[style*="display: flex"].auth-wall-container {
+    display: flex !important;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    padding: 40px;
+    margin: 20px;
+    box-sizing: border-box;
+}
+
 .blur-card {
     background: var(--surface-dark);
     backdrop-filter: blur(16px);
@@ -658,27 +679,78 @@ select.form-select option {
 @media (max-width: 768px) {
     .app-container {
         flex-direction: column;
+        padding: 12px;
+        gap: 16px;
     }
 
     .sidebar {
         width: 100%;
         height: auto;
         position: static;
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 10px;
+        flex-direction: column;
+        gap: 16px;
         padding: 20px;
+        border-radius: 20px;
+    }
+
+    .logo {
+        justify-content: center;
+        padding: 0;
     }
 
     .nav-links {
         flex-direction: row;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
         width: 100%;
+        gap: 8px;
+        padding-bottom: 8px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .nav-links::-webkit-scrollbar {
+        height: 4px;
+    }
+    
+    .nav-links::-webkit-scrollbar-thumb {
+        background: var(--surface-light);
+        border-radius: 2px;
     }
 
     .nav-links li {
-        flex: 1;
-        min-width: 120px;
-        justify-content: center;
+        flex: none;
+        padding: 10px 16px;
+        margin-bottom: 0;
+    }
+
+    .unit-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .blur-card, .auth-card {
+        padding: 24px 20px !important;
+        margin: 16px 12px !important;
+    }
+
+    .dictation-card {
+        padding: 30px 20px;
+    }
+
+    .dictation-header {
+        margin-bottom: 24px;
+        gap: 12px;
+    }
+
+    .dictation-header h2 {
+        font-size: 22px;
+    }
+
+    .btn {
+        padding: 12px 20px;
+        font-size: 15px;
+    }
+
+    h1 {
+        font-size: 28px;
     }
 }
