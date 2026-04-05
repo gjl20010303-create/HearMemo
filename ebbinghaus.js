@@ -95,6 +95,25 @@ class EbbinghausManager {
         this.saveData();
     }
 
+    // 新词首次答对（不计错误，从 level 1 开始复习周期）
+    markNewWordCorrect(word, meaning = '', subject = 'en') {
+        const todayStr = this.formatDate(new Date());
+        if (this.data[word]) {
+            // 已存在记录（只更新 meaning/subject，不增加 mistakes）
+            this.data[word].meaning = meaning || this.data[word].meaning;
+            this.data[word].subject = subject;
+        } else {
+            this.data[word] = {
+                word, meaning, subject,
+                level: 1,
+                nextReviewDate: this.calculateNextDate(todayStr, 1),
+                lastReviewDate: todayStr,
+                mistakes: 0
+            };
+        }
+        this.saveData();
+    }
+
     // 标记复习成功
     markReviewSuccess(word) {
         if (!this.data[word]) return;

@@ -115,13 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btnSprint) {
                 btnSprint.innerHTML = `<i class="ri-play-fill"></i> 开始今日冲刺 (${wordCount}词)`;
             }
-            if (pageHomeSprint) {
-                const descEl = pageHomeSprint.querySelector('p');
-                if (descEl) {
-                    descEl.textContent = isLowerGrade
-                        ? '每次背 20 个单词，每周建议完成 3 次，轻松打好中考词汇基础。'
-                        : '包含新词与艾宾浩斯错题复习，共计 50 词。采用"看英文写中文意思"以及变形词速记方式。';
-                }
+            const descEl = document.getElementById('sprint-desc-text');
+            if (descEl) {
+                descEl.textContent = isLowerGrade
+                    ? '每次背 20 个单词，每周建议完成 3 次，轻松打好中考词汇基础。'
+                    : '包含新词与艾宾浩斯错题复习，共计 50 词。采用"看英文写中文意思"以及变形词速记方式。';
             }
         }
 
@@ -1140,8 +1138,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isReview) {
                 window.ebbinghaus.markReviewSuccess(wordObj.word);
             } else {
-                window.ebbinghaus.addOrUpdateMistake(wordObj.word, wordObj.meaning, 'en');
-                window.ebbinghaus.markReviewSuccess(wordObj.word);
+                // 新词答对：记入系统但不计错误次数
+                window.ebbinghaus.markNewWordCorrect(wordObj.word, wordObj.meaning, 'en');
             }
         } else {
             if (isReview) {

@@ -160,7 +160,7 @@
                         <i class="ri-rocket-2-fill" style="font-size: 40px; color: #818cf8;"></i>
                     </div>
                     <h2 style="margin-bottom: 10px; font-size: 24px;">今日冲刺任务</h2>
-                    <p style="color: #94a3b8; margin-bottom: 30px; max-width: 400px; line-height: 1.6;">包含新词与艾宾浩斯错题复习，共计 50 词。采用“看英文写中文意思”以及变形词速记方式。</p>
+                    <p id=”sprint-desc-text” style=”color: #94a3b8; margin-bottom: 30px; max-width: 400px; line-height: 1.6;”>包含新词与艾宾浩斯错题复习，共计 50 词。采用”看英文写中文意思”以及变形词速记方式。</p>
                     <button class="btn primary pulse-animation" id="btn-start-sprint" style="font-size: 18px; padding: 12px 30px; border-radius: 30px;">
                         <i class="ri-play-fill"></i> 开始今日冲刺 (50词)
                     </button>
@@ -235,16 +235,18 @@
                     </div>
                 </div>
 
-                <div class="dictation-card" style="margin-top: 30px; text-align: center; padding: 40px 20px;">
+                <div class="dictation-card" style="margin-top: 30px; text-align: center; padding: 30px 20px;">
                     <!-- Big English Word -->
-                    <h2 id="sprint-word-display" style="font-size: 48px; font-weight: 800; color: #1e293b; letter-spacing: 2px; margin-bottom: 20px;">
-                        environment
-                    </h2>
-                    
-                    <!-- Audio Control -->
-                    <button class="btn-icon" id="btn-sprint-play" style="width: 60px; height: 60px; font-size: 28px; background: #e0e7ff; color: #4f46e5; border-radius: 50%; margin: 0 auto 30px auto;">
-                        <i class="ri-volume-up-fill"></i>
-                    </button>
+                    <div style="background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 20px; padding: 28px 24px 20px; margin-bottom: 24px; border: 2px solid #c7d2fe;">
+                        <p style="font-size: 12px; color: #6366f1; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px;">英文单词</p>
+                        <h2 id="sprint-word-display" style="font-size: 52px; font-weight: 900; color: #1e1b4b; letter-spacing: 3px; margin: 0; line-height: 1.1; word-break: break-all;">
+                            environment
+                        </h2>
+                        <!-- Audio Control -->
+                        <button class="btn-icon" id="btn-sprint-play" style="width: 52px; height: 52px; font-size: 24px; background: #4f46e5; color: #fff; border-radius: 50%; margin: 16px auto 0 auto; display: flex; align-items: center; justify-content: center;">
+                            <i class="ri-volume-up-fill"></i>
+                        </button>
+                    </div>
 
                     <!-- Step 1: Meaning Input -->
                     <div id="sprint-step-meaning" style="max-width: 400px; margin: 0 auto;">
