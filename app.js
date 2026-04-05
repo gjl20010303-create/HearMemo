@@ -964,7 +964,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const progEl = document.getElementById('sprint-progress');
         if (progEl) progEl.style.width = `${(sprintIndex / sprintList.length) * 100}%`;
         
-        if (sprintWordDisplay) sprintWordDisplay.textContent = currentWord.word.toUpperCase();
+        if (sprintWordDisplay) sprintWordDisplay.textContent = currentWord.word;
 
         if (sprintStepMeaning) sprintStepMeaning.style.display = 'block';
         if (sprintMeaningInput) {
