@@ -24,20 +24,20 @@ class EbbinghausManager {
             const res = await fetch('/api/ebbinghaus', {
                 headers: { 'Authorization': `Bearer ${this._authToken}` }
             });
-            if (!res.ok) return;
-            const json = await res.json();
-            if (json.data && Object.keys(json.data).length > 0) {
-                // 服务器有数据 → 以服务器为准
-                this.data = json.data;
-                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
-            } else {
-                // 服务器无数据 → 把本地数据迁移上去
+            if (res.status === 404) {
+                // 服务器没有记录 → 把本地数据迁移上去（首次登录 / 新浏览器迁移）
                 const localData = this.loadData();
                 if (Object.keys(localData).length > 0) {
                     this.data = localData;
                     await this._saveToServer();
                 }
+                return;
             }
+            if (!res.ok) return;
+            const json = await res.json();
+            // 服务器有记录（包括空 {}）→ 以服务器为准，不再读 localStorage
+            this.data = json.data || {};
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
         } catch (e) {
             console.warn('Ebbinghaus: 服务器加载失败，使用本地数据', e);
         }

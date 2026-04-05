@@ -224,13 +224,44 @@ app.get('/api/sprint-words', authenticateToken, (req, res) => {
 });
 
 // 1.2 Get Ebbinghaus data for current user (cloud sync)
+// 404 = no record exists (client migrates localStorage); 200 = use server data even if empty
 app.get('/api/ebbinghaus', authenticateToken, (req, res) => {
     const userId = req.user.id;
     db.get('SELECT data FROM ebbinghaus WHERE user_id = ?', [userId], (err, row) => {
         if (err) return res.status(500).json({ error: 'Database error' });
+        if (!row) return res.status(404).json({ error: 'No record' });
         let data = {};
-        if (row) { try { data = JSON.parse(row.data); } catch (e) {} }
+        try { data = JSON.parse(row.data); } catch (e) {}
         res.json({ data });
+    });
+});
+
+// 1.4 Teacher: all students' progress summary
+app.get('/api/progress/all', authenticateToken, (req, res) => {
+    if (req.user.grade !== 'all') return res.status(403).json({ error: '仅管理员可访问' });
+    db.all(`
+        SELECT u.id, u.username, u.grade, e.data, e.updated_at
+        FROM users u
+        LEFT JOIN ebbinghaus e ON u.id = e.user_id
+        ORDER BY u.grade, u.username
+    `, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const today = new Date().toISOString().slice(0, 10);
+        const results = rows.map(row => {
+            let data = {};
+            try { if (row.data) data = JSON.parse(row.data); } catch (e) {}
+            const words = Object.values(data);
+            return {
+                username: row.username,
+                grade: row.grade,
+                total_seen: words.length,
+                mastered: words.filter(w => w.level >= 3).length,
+                today_words: words.filter(w => w.lastReviewDate === today).length,
+                today_date: row.updated_at ? row.updated_at.slice(0, 10) : null,
+                last_synced: row.updated_at || null
+            };
+        });
+        res.json(results);
     });
 });
 

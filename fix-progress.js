@@ -30,20 +30,22 @@ db.all("SELECT * FROM units WHERE grade = '9' AND subject = 'en' ORDER BY id ASC
     const nextStr = fmt(new Date(Date.now() + 2 * 86400000));  // nextReviewDate: 2天后
 
     // ---- 配置：哪个 user_id 调到第几天 ----
+    // seenCount=0 → 写入空记录（Day 1），服务器返回 {} 会阻止从 localStorage 迁移
     const targets = [
         { userId: 6, username: 'lucian', seenCount: 100 },  // Day 3 = 已背前100词
-        // 教师 (user_id=0) 清空 → Day 1
-        { userId: 0, username: '教师', seenCount: 0 },
+        { userId: 0, username: '教师', seenCount: 0 },       // Day 1 = 清空但保留记录
     ];
 
     let done = 0;
     targets.forEach(({ userId, username, seenCount }) => {
         if (seenCount === 0) {
-            db.run('DELETE FROM ebbinghaus WHERE user_id = ?', [userId], err => {
-                if (err) console.error(`${username} 清空失败:`, err);
-                else console.log(`${username} (user_id=${userId}) → 已清空，下次背 Day 1`);
-                if (++done === targets.length) db.close();
-            });
+            // 写入空记录而非删除，这样服务器返回 200 + {}，客户端不会再从 localStorage 迁移
+            db.run('INSERT OR REPLACE INTO ebbinghaus (user_id, data, updated_at) VALUES (?, ?, ?)',
+                [userId, '{}', new Date().toISOString()], err => {
+                    if (err) console.error(`${username} 重置失败:`, err);
+                    else console.log(`${username} (user_id=${userId}) → 已重置为 Day 1 (空记录)`);
+                    if (++done === targets.length) db.close();
+                });
             return;
         }
 
