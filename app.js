@@ -78,39 +78,54 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser = user;
         authWall.style.display = 'none';
         mainApp.style.display = 'flex';
-        const gradeLabel = user.grade === '4' ? '四年级' : user.grade === '5' ? '五年级' : '教师(全年级)';
+        const gradeLabels = { '4': '四年级', '5': '五年级', '7': '七年级', '8': '八年级', '9': '九年级', 'all': '教师(全年级)' };
         document.getElementById('user-display-name').textContent = user.username;
-        document.getElementById('user-display-grade').textContent = gradeLabel;
-        // Auto-unlock admin view if this is an admin session
+        document.getElementById('user-display-grade').textContent = gradeLabels[user.grade] || user.grade;
         if (user.isAdmin) {
             navManage.style.display = 'flex';
         }
-        
+
         const navHomeEn = document.getElementById('nav-home-en');
         const navHomeZh = document.getElementById('nav-home-zh');
         const navHomeSprint = document.getElementById('nav-home-sprint');
-        const pageHomeEn = document.getElementById('page-home-en');
-        const pageHomeZh = document.getElementById('page-home-zh');
+        const navNotebook = document.getElementById('nav-notebook');
         const pageHomeSprint = document.getElementById('page-home-sprint');
 
-        if (user.grade === '9' || user.grade === 'all') {
-            // Route B: Sprint Mode
-            if (user.grade === '9') {
+        if (['7', '8', '9', 'all'].includes(user.grade)) {
+            // Sprint Mode: hide standard EN/ZH dictation tabs for students
+            if (['7', '8', '9'].includes(user.grade)) {
                 if (navHomeEn) navHomeEn.style.display = 'none';
                 if (navHomeZh) navHomeZh.style.display = 'none';
             }
             if (navHomeSprint) {
                 navHomeSprint.style.display = 'flex';
-                // Activate sprint tab
                 navLinks.forEach(l => l.classList.remove('active'));
                 navHomeSprint.classList.add('active');
             }
+            if (navNotebook) navNotebook.style.display = 'flex';
             pages.forEach(p => p.classList.remove('active'));
             if (pageHomeSprint) pageHomeSprint.classList.add('active');
+
+            // Customize sprint page text and button for grade 7/8
+            const isLowerGrade = ['7', '8'].includes(user.grade);
+            const wordCount = isLowerGrade ? 20 : 50;
+            const btnSprint = document.getElementById('btn-start-sprint');
+            if (btnSprint) {
+                btnSprint.innerHTML = `<i class="ri-play-fill"></i> 开始今日冲刺 (${wordCount}词)`;
+            }
+            if (pageHomeSprint) {
+                const descEl = pageHomeSprint.querySelector('p');
+                if (descEl) {
+                    descEl.textContent = isLowerGrade
+                        ? '每次背 20 个单词，每周建议完成 3 次，轻松打好中考词汇基础。'
+                        : '包含新词与艾宾浩斯错题复习，共计 50 词。采用"看英文写中文意思"以及变形词速记方式。';
+                }
+            }
         }
 
         loadUnitsFromServer();
         renderEbbinghausStats();
+        renderSprintFrequencyNotice();
     }
 
     function showAuthWall() {
@@ -252,8 +267,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(`page-${pageId}`).classList.add('active');
 
             if (pageId.startsWith('home')) renderUnitGrids();
+            if (pageId === 'home-sprint') renderSprintFrequencyNotice();
             if (pageId === 'ebbinghaus') renderEbbinghausStats();
             if (pageId === 'manage') populateEditUnitSelect();
+            if (pageId === 'notebook') renderNotebook();
 
             // 切换页面时清除所有挂起的定时器并停止正在播放的语音
             if (audioTimeoutId) clearTimeout(audioTimeoutId);
@@ -845,6 +862,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnStartSprint) {
         btnStartSprint.addEventListener('click', async () => {
             try {
+                // Grade-based session limit: 20 words for grade 7/8, 50 for grade 9
+                const isLowerGrade = currentUser && ['7', '8'].includes(currentUser.grade);
+                const MAX_SPRINT = isLowerGrade ? 20 : 50;
+
+                // Grade 7/8: frequency check (recommend max 3 sessions/week)
+                if (isLowerGrade) {
+                    const sessionsThisWeek = getSessionsThisWeek();
+                    const todayStr = window.ebbinghaus.formatDate(new Date());
+                    const alreadyTodaySession = sessionsThisWeek.includes(todayStr);
+                    if (!alreadyTodaySession && sessionsThisWeek.length >= 3) {
+                        const go = confirm(`本周已完成 ${sessionsThisWeek.length} 次背词任务，超出每周推荐的 3 次。\n\n继续也没问题，每次还是只背 20 词。点取消可以先休息一天。`);
+                        if (!go) return;
+                    }
+                }
+
                 // Fetch STRICTLY grade=9 words from the server — SQL level guarantee
                 const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
                 if (!resp.ok) { alert('加载词库失败，请重试'); return; }
@@ -872,17 +904,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 reviewItems.sort(() => Math.random() - 0.5);
 
                 sprintList = [...reviewItems];
-                const needed = 50 - sprintList.length;
+                const needed = MAX_SPRINT - sprintList.length;
                 if (needed > 0) {
                     sprintList = sprintList.concat(newWords.slice(0, needed));
-                } else if (sprintList.length > 50) {
-                    sprintList = sprintList.slice(0, 50);
+                } else if (sprintList.length > MAX_SPRINT) {
+                    sprintList = sprintList.slice(0, MAX_SPRINT);
                 }
 
                 if (sprintList.length === 0) {
                     alert('词库为空或今日已无复习/新词任务！');
                     return;
                 }
+
+                // Record today's sprint session (for grade 7/8 frequency display)
+                recordTodaySession();
+                renderSprintFrequencyNotice();
 
                 sprintIndex = 0;
                 const totalEl = document.getElementById('sprint-total-idx');
@@ -945,6 +981,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sprintStepForm) sprintStepForm.style.display = 'none';
         if (btnSprintNext) btnSprintNext.style.display = 'none';
 
+        // Reset etymology card for new word
+        const etymCard = document.getElementById('etymology-card');
+        if (etymCard) etymCard.style.display = 'none';
+        const etymContent = document.getElementById('etymology-content');
+        if (etymContent) etymContent.textContent = '';
+        const etymSavedMsg = document.getElementById('etymology-saved-msg');
+        if (etymSavedMsg) etymSavedMsg.style.display = 'none';
+        const btnSaveEtym = document.getElementById('btn-save-etymology');
+        if (btnSaveEtym) { btnSaveEtym.disabled = false; btnSaveEtym.style.opacity = '1'; }
+
         setTimeout(() => {
             playSprintAudio();
             if (sprintMeaningInput) sprintMeaningInput.focus();
@@ -988,6 +1034,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         setTimeout(() => sprintFormInput.focus(), 100);
                     } else {
                         handleSprintResult(currentWord, true);
+                        fetchAndShowEtymology(currentWord);
                         btnSprintNext.style.display = 'block';
                         btnSprintNext.focus();
                     }
@@ -1001,9 +1048,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     sprintMeaningFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 错误。(标准答案: ' + currentWord.meaning + ')</span>';
                     sprintMeaningInput.disabled = true;
                     btnSprintCheckMeaning.style.display = 'none';
+                    handleSprintResult(currentWord, false);
+                    fetchAndShowEtymology(currentWord);
                     btnSprintNext.style.display = 'block';
                     btnSprintNext.focus();
-                    handleSprintResult(currentWord, false);
                 }
             } catch (e) {
                 console.error(e);
@@ -1036,6 +1084,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 sprintFormFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 拼写错误。(正确答案: ' + currentWord.form_change_word + ')</span>';
                 handleSprintResult(currentWord, false);
             }
+            fetchAndShowEtymology(currentWord);
             btnSprintNext.style.display = 'block';
             btnSprintNext.focus();
         });
@@ -1083,6 +1132,175 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+    }
+
+    // ---- Etymology (词根词缀) Feature ----
+
+    // Fetch etymology from the server and populate/show the card
+    function fetchAndShowEtymology(wordObj) {
+        const card = document.getElementById('etymology-card');
+        const loading = document.getElementById('etymology-loading');
+        const content = document.getElementById('etymology-content');
+        if (!card || !content) return;
+
+        card.style.display = 'block';
+        if (loading) loading.style.display = 'inline';
+        content.textContent = '';
+
+        fetch(`/api/etymology?word=${encodeURIComponent(wordObj.word)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (loading) loading.style.display = 'none';
+                content.textContent = data.etymology || '暂无词根词缀信息';
+                // Store current word info on the card for save handler
+                card.dataset.word = wordObj.word;
+                card.dataset.meaning = wordObj.meaning || '';
+                card.dataset.etymology = data.etymology || '';
+            })
+            .catch(() => {
+                if (loading) loading.style.display = 'none';
+                content.textContent = '（词根词缀解析暂时不可用）';
+            });
+    }
+
+    const btnSaveEtymology = document.getElementById('btn-save-etymology');
+    if (btnSaveEtymology) {
+        btnSaveEtymology.addEventListener('click', () => {
+            const card = document.getElementById('etymology-card');
+            if (!card) return;
+            const word = card.dataset.word;
+            const meaning = card.dataset.meaning;
+            const etymology = card.dataset.etymology;
+            if (!word || !etymology) return;
+
+            saveEtymologyNote(word, meaning, etymology);
+
+            btnSaveEtymology.disabled = true;
+            btnSaveEtymology.style.opacity = '0.5';
+            const savedMsg = document.getElementById('etymology-saved-msg');
+            if (savedMsg) savedMsg.style.display = 'inline';
+        });
+    }
+
+    // ---- Etymology Notebook ----
+    const ETYMOLOGY_NOTES_KEY = 'hearmemo_etymology_notes';
+
+    function loadNotes() {
+        try {
+            return JSON.parse(localStorage.getItem(ETYMOLOGY_NOTES_KEY) || '[]');
+        } catch (e) { return []; }
+    }
+
+    function saveEtymologyNote(word, meaning, etymology) {
+        const notes = loadNotes();
+        // Update if exists, otherwise prepend
+        const existingIdx = notes.findIndex(n => n.word === word);
+        const note = { word, meaning, etymology, savedAt: window.ebbinghaus.formatDate(new Date()) };
+        if (existingIdx >= 0) {
+            notes[existingIdx] = note;
+        } else {
+            notes.unshift(note);
+        }
+        localStorage.setItem(ETYMOLOGY_NOTES_KEY, JSON.stringify(notes));
+    }
+
+    function deleteNote(word) {
+        const notes = loadNotes().filter(n => n.word !== word);
+        localStorage.setItem(ETYMOLOGY_NOTES_KEY, JSON.stringify(notes));
+    }
+
+    function renderNotebook(filter) {
+        const listEl = document.getElementById('notebook-list');
+        const emptyEl = document.getElementById('notebook-empty');
+        const countEl = document.getElementById('notebook-count');
+        if (!listEl) return;
+
+        let notes = loadNotes();
+        if (filter) {
+            const q = filter.toLowerCase();
+            notes = notes.filter(n => n.word.toLowerCase().includes(q) || (n.meaning || '').includes(q));
+        }
+
+        if (countEl) countEl.textContent = `共 ${notes.length} 条`;
+
+        if (notes.length === 0) {
+            listEl.innerHTML = '';
+            if (emptyEl) emptyEl.style.display = 'block';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        listEl.innerHTML = '';
+        notes.forEach(note => {
+            const div = document.createElement('div');
+            div.style.cssText = 'background:rgba(255,255,255,0.05);border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid rgba(99,102,241,0.2);';
+            div.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                    <div>
+                        <strong style="color:#a5b4fc;font-size:17px;">${note.word}</strong>
+                        <span style="color:#94a3b8;font-size:13px;margin-left:8px;">${note.meaning || ''}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:11px;color:#64748b;">${note.savedAt}</span>
+                        <button data-word="${note.word}" class="btn-delete-note" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;font-family:inherit;">删除</button>
+                    </div>
+                </div>
+                <div style="color:#e2e8f0;font-size:14px;line-height:1.8;white-space:pre-wrap;">${note.etymology}</div>
+            `;
+            div.querySelector('.btn-delete-note').addEventListener('click', (e) => {
+                if (confirm(`确定删除 "${note.word}" 的词根笔记吗？`)) {
+                    deleteNote(note.word);
+                    renderNotebook(document.getElementById('notebook-search')?.value.trim());
+                }
+            });
+            listEl.appendChild(div);
+        });
+    }
+
+    const notebookSearch = document.getElementById('notebook-search');
+    if (notebookSearch) {
+        notebookSearch.addEventListener('input', () => {
+            renderNotebook(notebookSearch.value.trim());
+        });
+    }
+
+    // ---- Sprint Session Frequency Tracking ----
+    const SPRINT_SESSIONS_KEY = 'hearmemo_sprint_sessions';
+
+    function getSessionsThisWeek() {
+        try {
+            const sessions = JSON.parse(localStorage.getItem(SPRINT_SESSIONS_KEY) || '[]');
+            const today = new Date();
+            const weekAgoStr = window.ebbinghaus.formatDate(new Date(today - 7 * 24 * 60 * 60 * 1000));
+            return sessions.filter(d => d >= weekAgoStr);
+        } catch (e) { return []; }
+    }
+
+    function recordTodaySession() {
+        try {
+            const sessions = JSON.parse(localStorage.getItem(SPRINT_SESSIONS_KEY) || '[]');
+            const todayStr = window.ebbinghaus.formatDate(new Date());
+            if (!sessions.includes(todayStr)) {
+                sessions.push(todayStr);
+                // Keep only last 30 days
+                const cutoff = window.ebbinghaus.formatDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+                localStorage.setItem(SPRINT_SESSIONS_KEY, JSON.stringify(sessions.filter(d => d >= cutoff)));
+            }
+        } catch (e) {}
+    }
+
+    function renderSprintFrequencyNotice() {
+        const statsEl = document.getElementById('sprint-stats-display');
+        if (!statsEl || !currentUser) return;
+        const isLowerGrade = ['7', '8'].includes(currentUser.grade);
+        const sessions = getSessionsThisWeek();
+        const reviewCount = window.ebbinghaus.getTodayReviewList().filter(i => i.subject === 'en').length;
+        if (isLowerGrade) {
+            const remaining = Math.max(0, 3 - sessions.length);
+            statsEl.innerHTML = `本周已完成 <strong>${sessions.length}</strong> 次 · 本周还剩 <strong>${remaining}</strong> 次推荐任务<br><span style="font-size:12px;">今日待复习 ${reviewCount} 词</span>`;
+        } else {
+            statsEl.innerHTML = `今日待复习 <strong>${reviewCount}</strong> 词`;
+        }
     }
 
 });

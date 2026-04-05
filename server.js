@@ -110,8 +110,8 @@ app.post('/api/register', async (req, res) => {
     if (!username || !password || !grade) {
         return res.status(400).json({ error: '用户名、密码和年级不能为空' });
     }
-    if (!['4', '5', '9'].includes(String(grade))) {
-        return res.status(400).json({ error: '年级只能是四年级(4)、五年级(5)或九年级(9)' });
+    if (!['4', '5', '7', '8', '9'].includes(String(grade))) {
+        return res.status(400).json({ error: '年级只能是四(4)、五(5)、七(7)、八(8)或九年级(9)' });
     }
 
     try {
@@ -330,6 +330,54 @@ app.post('/api/check_meaning', async (req, res) => {
     }
 });
 
+
+// In-memory cache for etymology results (avoids duplicate AI calls per word)
+const etymologyCache = new Map();
+
+// 1.8. Etymology — word root and affix analysis for junior/senior high students
+app.get('/api/etymology', async (req, res) => {
+    const { word } = req.query;
+    if (!word) return res.status(400).json({ error: 'word is required' });
+    if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
+
+    if (etymologyCache.has(word)) {
+        return res.json({ word, etymology: etymologyCache.get(word) });
+    }
+
+    const prompt = `分析英语单词"${word}"的词根词缀，帮助初中生记忆：
+1. 标注词根/前缀/后缀及各自含义（例：en-使...+ viron周围 + -ment名词后缀）
+2. 一句话联想记忆小技巧（不超过20字）
+3. 同根词1-2个举例
+
+用中文解释，格式简洁，总字数不超过100字。`;
+
+    try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${DEEPSEEK_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                max_tokens: 200,
+                temperature: 0.4,
+                messages: [
+                    { role: 'system', content: '你是英语词汇专家，专门帮助初中生用词根词缀法记单词。回答简洁有趣，适合中学生阅读。' },
+                    { role: 'user', content: prompt }
+                ]
+            })
+        });
+
+        const data = await response.json();
+        const etymology = data.choices?.[0]?.message?.content?.trim() || '暂无词根词缀信息';
+        etymologyCache.set(word, etymology);
+        res.json({ word, etymology });
+    } catch (err) {
+        console.error('Etymology API Error:', err);
+        res.status(500).json({ error: '词根词缀获取失败' });
+    }
+});
 
 // Admin login: return a JWT with isAdmin=true and grade='all'
 app.post('/api/admin-login', async (req, res) => {

@@ -73,6 +73,8 @@
                     <select id="reg-grade" class="form-select">
                         <option value="4">四年级</option>
                         <option value="5">五年级</option>
+                        <option value="7">七年级 (中考词书)</option>
+                        <option value="8">八年级 (中考词书)</option>
                         <option value="9">九年级 (冲刺模式)</option>
                     </select>
                 </div>
@@ -112,6 +114,7 @@
                 <li data-page="home-zh" id="nav-home-zh"><i class="ri-font-color"></i> <span>语文听写</span></li>
                 <li data-page="home-sprint" id="nav-home-sprint" style="display: none;"><i class="ri-rocket-line"></i> <span>冲刺大词书</span></li>
                 <li data-page="ebbinghaus"><i class="ri-calendar-todo-line"></i> <span>复习计划</span></li>
+                <li data-page="notebook" id="nav-notebook" style="display: none;"><i class="ri-book-2-line"></i> <span>词根笔记本</span></li>
                 <li data-page="manage" id="nav-manage" style="display: none;"><i class="ri-folder-add-line"></i>
                     <span>词库管理</span>
                 </li>
@@ -267,6 +270,20 @@
                         </button>
                     </div>
 
+                    <!-- Etymology Card (词根词缀解析, hidden initially) -->
+                    <div id="etymology-card" style="display:none; margin: 16px auto 0 auto; max-width: 400px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: 14px; padding: 16px; text-align: left;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                            <span style="font-size:18px;">📚</span>
+                            <strong style="color:#a5b4fc; font-size:15px;">词根词缀解析</strong>
+                            <span id="etymology-loading" style="font-size:12px; color:#818cf8; display:none;"><i class="ri-loader-4-line ri-spin"></i> 分析中</span>
+                        </div>
+                        <div id="etymology-content" style="color:#e2e8f0; font-size:14px; line-height:1.8; white-space: pre-wrap; min-height:20px;"></div>
+                        <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                            <button id="btn-save-etymology" style="background:rgba(99,102,241,0.3); color:#a5b4fc; border:1px solid rgba(99,102,241,0.5); font-size:13px; padding:7px 16px; border-radius:8px; cursor:pointer; font-family:inherit;">✅ 保存到笔记本</button>
+                            <span id="etymology-saved-msg" style="display:none; color:#059669; font-size:13px;">✓ 已保存！</span>
+                        </div>
+                    </div>
+
                     <!-- Next Button (Hidden initially) -->
                     <button class="btn outline w-full" id="btn-sprint-next" style="margin-top: 30px; max-width: 400px; display: none; padding: 12px; font-size: 16px; margin-left: auto; margin-right: auto;">
                         继续下一个 <i class="ri-arrow-right-line"></i>
@@ -316,6 +333,26 @@
                 </div>
             </section>
 
+            <!-- Notebook Page (词根词缀笔记本) -->
+            <section id="page-notebook" class="page">
+                <header class="page-header">
+                    <h1>词根词缀笔记本</h1>
+                    <p>用词根词缀法，记住更多单词</p>
+                </header>
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px;">
+                        <input type="text" id="notebook-search" class="form-input" placeholder="🔍 搜索单词..." style="flex:1; font-size:14px; padding:10px 14px;">
+                        <span id="notebook-count" style="font-size:13px; color:#94a3b8; white-space:nowrap; padding-right:4px;"></span>
+                    </div>
+                    <div id="notebook-list"></div>
+                    <div id="notebook-empty" style="display:none; text-align:center; color:#94a3b8; padding:60px 20px;">
+                        <div style="font-size:52px; margin-bottom:16px;">📝</div>
+                        <p style="font-size:16px; margin-bottom:8px;">笔记本还是空的</p>
+                        <p style="font-size:13px; line-height:1.6;">在冲刺词书完成每个单词后<br>可以保存词根词缀解析到这里</p>
+                    </div>
+                </div>
+            </section>
+
             <!-- Unit Management Page -->
             <section id="page-manage" class="page">
                 <header class="page-header">
@@ -352,6 +389,8 @@
                             <option value="all">全年级通用</option>
                             <option value="4">四年级</option>
                             <option value="5">五年级</option>
+                            <option value="7">七年级</option>
+                            <option value="8">八年级</option>
                             <option value="9">九年级 (大词书)</option>
                         </select>
                     </div>
