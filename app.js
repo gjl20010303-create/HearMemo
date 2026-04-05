@@ -64,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCloseAdminModal = document.getElementById('btn-close-admin-modal');
     const btnSubmitAdmin = document.getElementById('btn-submit-admin');
     const navManage = document.getElementById('nav-manage');
+    const navStudents = document.getElementById('nav-students');
     const btnLogout = document.getElementById('btn-logout');
 
     // ---- Auth Helper ----
@@ -82,7 +83,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('user-display-name').textContent = user.username;
         document.getElementById('user-display-grade').textContent = gradeLabels[user.grade] || user.grade;
         if (user.isAdmin) {
-            navManage.style.display = 'flex';
+            if (navManage) navManage.style.display = 'flex';
+            if (navStudents) navStudents.style.display = 'flex';
         }
 
         const navHomeEn = document.getElementById('nav-home-en');
@@ -227,7 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
             authToken = '';
             currentUser = null;
             adminKey = '';
-            navManage.style.display = 'none';
+            if (navManage) navManage.style.display = 'none';
+            if (navStudents) navStudents.style.display = 'none';
             showAuthWall();
         }
     });
@@ -328,7 +331,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (res.ok) {
                     adminKey = inputKey;
-                    navManage.style.display = 'flex';
+                    if (navManage) navManage.style.display = 'flex';
+                    if (navStudents) navStudents.style.display = 'flex';
                     if (adminModal) adminModal.classList.remove('active');
                     alert('已进入教师管理模式！');
                     if (btnAdminLogin) btnAdminLogin.style.display = 'none';
@@ -1359,5 +1363,107 @@ document.addEventListener('DOMContentLoaded', () => {
             return cp;
         } catch (e) { return null; }
     }
+
+    // ── 教师端：学生进度总览 ─────────────────────────────────────────────
+    async function renderStudentProgress() {
+        const wrap = document.getElementById('students-table-wrap');
+        if (!wrap) return;
+        wrap.innerHTML = '<div class="empty-state">加载中…</div>';
+        try {
+            const resp = await fetch('/api/progress/all', { headers: authHeaders() });
+            if (!resp.ok) { wrap.innerHTML = '<div class="empty-state">权限不足 或加载失败</div>'; return; }
+            const rows = await resp.json();
+            if (rows.length === 0) { wrap.innerHTML = '<div class="empty-state">暂无学生数据。学生完成一次冲刺后数据会自动同步。</div>'; return; }
+
+            const today = new Date().toISOString().slice(0, 10);
+            const tableRows = rows.map(r => {
+                const lastSync = r.last_synced ? new Date(r.last_synced) : null;
+                const minsAgo  = lastSync ? Math.round((Date.now() - lastSync) / 60000) : null;
+                const syncLabel = minsAgo === null ? '从未'
+                    : minsAgo < 60 ? `${minsAgo} 分钟前`
+                    : minsAgo < 1440 ? `${Math.round(minsAgo/60)} 小时前`
+                    : `${Math.round(minsAgo/1440)} 天前`;
+                const todayActive = r.today_date === today;
+                const pct = r.total_seen > 0 ? ((r.mastered / Math.max(r.total_seen,1)) * 100).toFixed(0) : 0;
+                return `<tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+                    <td style="padding:12px 10px; font-weight:600">${r.username}</td>
+                    <td style="padding:12px 10px; color:#94a3b8; font-size:13px">${r.grade === '9' ? '九年级' : r.grade === '4' ? '四年级' : r.grade === '5' ? '五年级' : r.grade}</td>
+                    <td style="padding:12px 10px">
+                        <span style="font-size:15px; font-weight:700; color:#818cf8">${r.total_seen}</span>
+                        <span style="color:#94a3b8; font-size:12px"> 词已接触</span>
+                    </td>
+                    <td style="padding:12px 10px">
+                        <span style="color:#10b981; font-weight:600">${r.mastered}</span>
+                        <span style="color:#94a3b8; font-size:12px"> 已掌握 (${pct}%)</span>
+                    </td>
+                    <td style="padding:12px 10px">
+                        <span style="${todayActive ? 'color:#f59e0b;font-weight:600' : 'color:#94a3b8'}">${todayActive ? '✅ 今日已学 ' + r.today_words + ' 词' : '❌ 今日未学习'}</span>
+                    </td>
+                    <td style="padding:12px 10px; color:#64748b; font-size:12px">${syncLabel}同步</td>
+                    <td style="padding:12px 10px">
+                        <button onclick="showStudentDetail('${r.username}')" style="background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">详情</button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            wrap.innerHTML = `
+                <div style="overflow-x:auto">
+                <table style="width:100%; border-collapse:collapse; font-size:14px">
+                    <thead>
+                        <tr style="color:#64748b; font-size:12px; text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.1)">
+                            <th style="padding:8px 10px;text-align:left">姓名</th>
+                            <th style="padding:8px 10px;text-align:left">年级</th>
+                            <th style="padding:8px 10px;text-align:left">总进度</th>
+                            <th style="padding:8px 10px;text-align:left">已掌握</th>
+                            <th style="padding:8px 10px;text-align:left">今日状态</th>
+                            <th style="padding:8px 10px;text-align:left">同步时间</th>
+                            <th style="padding:8px 10px;text-align:left"></th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+                </div>`;
+        } catch (e) {
+            wrap.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
+        }
+    }
+
+    // 查看某学生的错词详情
+    window.showStudentDetail = async function(username) {
+        try {
+            const resp = await fetch(`/api/progress/detail/${encodeURIComponent(username)}`, { headers: authHeaders() });
+            if (!resp.ok) { alert('加载失败'); return; }
+            const data = await resp.json();
+            const eb = data.eb_snapshot || {};
+            const words = Object.values(eb).sort((a, b) => (b.mistakes || 0) - (a.mistakes || 0));
+            const problemWords = words.filter(w => w.mistakes > 0).slice(0, 50);
+
+            const win = window.open('', '_blank');
+            const rows = problemWords.map(w =>
+                `<tr><td>${w.word}</td><td>${w.meaning||''}</td><td style="color:${w.mistakes>2?'#dc2626':'#f59e0b'}">${w.mistakes} 次</td><td>${w.nextReviewDate==='2099-12-31'?'✅已掌握':('Lv.'+w.level+' 下次:'+w.nextReviewDate)}</td></tr>`
+            ).join('');
+            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${username} 的学习详情</title>
+              <style>body{font-family:system-ui;margin:20px 30px}table{border-collapse:collapse;width:100%}td,th{padding:8px 12px;border:1px solid #eee;font-size:13px}th{background:#f8f8f8}h2{color:#4338ca}</style></head>
+              <body><h2>${username} · 易错词 Top 50</h2>
+              <p style="color:#888">同步时间：${data.last_synced} · 共 ${words.length} 词在记忆库</p>
+              <table><tr><th>单词</th><th>中文</th><th>错误次数</th><th>状态</th></tr>${rows||'<tr><td colspan=4 style="color:#888">暂无错词记录</td></tr>'}</table>
+              </body></html>`);
+            win.document.close();
+        } catch (e) { alert('加载失败: ' + e.message); }
+    };
+
+    const btnRefreshStudents = document.getElementById('btn-refresh-students');
+    if (btnRefreshStudents) {
+        btnRefreshStudents.addEventListener('click', renderStudentProgress);
+    }
+    
+    // Load student data when navigating to that page
+    navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            if (link.dataset.page === 'students') {
+                renderStudentProgress();
+            }
+        });
+    });
 
 });
