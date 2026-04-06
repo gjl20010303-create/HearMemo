@@ -679,8 +679,8 @@ select.form-select option {
 @media (max-width: 768px) {
     .app-container {
         flex-direction: column;
-        padding: 12px;
-        gap: 16px;
+        padding: 10px;
+        gap: 12px;
     }
 
     .sidebar {
@@ -688,14 +688,40 @@ select.form-select option {
         height: auto;
         position: static;
         flex-direction: column;
-        gap: 16px;
-        padding: 20px;
+        gap: 12px;
+        padding: 16px 12px 10px;
         border-radius: 20px;
     }
 
+    .sidebar > div:last-child {
+        margin-top: 0 !important;
+        padding: 0 !important;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+    }
+
+    #user-badge {
+        margin-bottom: 0 !important;
+        flex: 1;
+        padding: 8px 12px !important;
+    }
+
+    #btn-logout {
+        width: auto !important;
+        padding: 8px 16px;
+        flex: 0 0 auto;
+    }
+
     .logo {
-        justify-content: center;
-        padding: 0;
+        justify-content: left;
+        padding: 0 4px;
+        font-size: 20px;
+    }
+
+    .logo i {
+        font-size: 24px;
     }
 
     .nav-links {
@@ -709,18 +735,18 @@ select.form-select option {
     }
 
     .nav-links::-webkit-scrollbar {
-        height: 4px;
-    }
-    
-    .nav-links::-webkit-scrollbar-thumb {
-        background: var(--surface-light);
-        border-radius: 2px;
+        display: none; /* Hide scrollbar for cleaner look on mobile */
     }
 
     .nav-links li {
         flex: none;
-        padding: 10px 16px;
+        padding: 8px 14px;
         margin-bottom: 0;
+        font-size: 14px;
+    }
+    
+    .nav-links li i {
+        font-size: 16px;
     }
 
     .unit-grid {
