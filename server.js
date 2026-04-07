@@ -77,6 +77,18 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 updated_at TEXT NOT NULL
             )
         `);
+
+        // Word definitions cache — shared across all users (first-caller populates)
+        db.run(`
+            CREATE TABLE IF NOT EXISTS word_definitions (
+                word TEXT NOT NULL PRIMARY KEY,
+                part_of_speech TEXT,
+                definition TEXT,
+                example_en TEXT,
+                example_zh TEXT,
+                cached_at TEXT NOT NULL
+            )
+        `);
     }
 });
 
@@ -265,6 +277,19 @@ app.get('/api/progress/all', authenticateToken, (req, res) => {
     });
 });
 
+// 1.4b Teacher: student detail (ebbinghaus snapshot)
+app.get('/api/progress/detail/:username', authenticateToken, (req, res) => {
+    if (req.user.grade !== 'all') return res.status(403).json({ error: '仅管理员可访问' });
+    db.get('SELECT u.username, u.grade, e.data, e.updated_at FROM users u LEFT JOIN ebbinghaus e ON u.id = e.user_id WHERE u.username = ?',
+        [req.params.username], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: '用户不存在' });
+            let eb = {};
+            try { if (row.data) eb = JSON.parse(row.data); } catch (e) {}
+            res.json({ username: row.username, grade: row.grade, last_synced: row.updated_at, eb_snapshot: eb });
+        });
+});
+
 // 1.3 Save Ebbinghaus data for current user (cloud sync)
 app.post('/api/ebbinghaus', authenticateToken, (req, res) => {
     const userId = req.user.id;
@@ -398,6 +423,77 @@ app.post('/api/check_meaning', async (req, res) => {
 });
 
 
+// 1.7b. Grade 5 Translation Check — check EN↔ZH sentence translation
+app.post('/api/check_translation', async (req, res) => {
+    const { sentence_en, sentence_zh, user_input, direction } = req.body;
+    if (!sentence_en || !sentence_zh || !user_input || !direction) {
+        return res.status(400).json({ error: 'Missing parameters' });
+    }
+    if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
+
+    const isEn2Zh = direction === 'en2zh';
+    const sourceSentence = isEn2Zh ? sentence_en : sentence_zh;
+    const targetSentence = isEn2Zh ? sentence_zh : sentence_en;
+    const targetLang = isEn2Zh ? '中文' : '英文';
+    const missedLang = isEn2Zh ? '英文' : '中文';
+    const meaningLang = isEn2Zh ? '中文' : '英文';
+
+    const prompt = `你是一位耐心的小学英语老师，正在批改五年级学生的翻译练习。
+翻译方向：${isEn2Zh ? '英译中（将英文译为中文）' : '中译英（将中文译为英文）'}
+原文：${sourceSentence}
+参考译文：${targetSentence}
+学生翻译：${user_input}
+
+请评判学生的翻译：
+- correct：核心意思准确，即使措辞或语序稍有不同
+- fuzzy：大意对但漏掉了关键词/短语，或某处有明显偏差
+- error：完全错误或与原文意思严重不符
+
+如果评为 fuzzy 或 error，请指出其中一个最重要的遗漏或错误词/短语：
+- missed_phrase：用${missedLang}表示（即原文语言中的词/短语）
+- missed_phrase_meaning：该词/短语的${meaningLang}翻译（即目标语言的意思），用于追问学生
+
+只返回JSON，不要任何额外内容：
+{"result":"correct|fuzzy|error","missed_phrase":"...","missed_phrase_meaning":"..."}`;
+
+    try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${DEEPSEEK_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                max_tokens: 100,
+                temperature: 0.1,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: 'You are a lenient primary school English teacher grading translation exercises. Output strict JSON only.' },
+                    { role: 'user', content: prompt }
+                ]
+            })
+        });
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        let result = { result: 'error', missed_phrase: null, missed_phrase_meaning: null };
+        try {
+            const parsed = JSON.parse(content);
+            result.result = parsed.result || 'error';
+            result.missed_phrase = parsed.missed_phrase || null;
+            result.missed_phrase_meaning = parsed.missed_phrase_meaning || null;
+        } catch (e) {
+            console.error('JSON Parse Error for check_translation:', content);
+        }
+        res.json(result);
+    } catch (err) {
+        console.error('Check Translation Error:', err);
+        res.status(500).json({ error: '翻译校验失败' });
+    }
+});
+
+
 // In-memory cache for etymology results (avoids duplicate AI calls per word)
 const etymologyCache = new Map();
 
@@ -444,6 +540,79 @@ app.get('/api/etymology', async (req, res) => {
         console.error('Etymology API Error:', err);
         res.status(500).json({ error: '词根词缀获取失败' });
     }
+});
+
+// 1.9. Word Info — part of speech, definition, example sentence (cached in DB per word)
+app.get('/api/word-info', authenticateToken, async (req, res) => {
+    const { word } = req.query;
+    if (!word) return res.status(400).json({ error: 'word is required' });
+    if (!DEEPSEEK_KEY) return res.status(500).json({ error: 'DeepSeek API key not configured' });
+
+    // Return from DB cache if available
+    db.get('SELECT part_of_speech, definition, example_en, example_zh FROM word_definitions WHERE word = ?', [word], async (err, row) => {
+        if (err) {
+            console.error('word_definitions DB read error:', err);
+            return res.status(500).json({ error: 'DB read failed' });
+        }
+
+        if (row) {
+            return res.json({ word, ...row, cached: true });
+        }
+
+        // Not cached — call DeepSeek
+        const prompt = `请为英文单词"${word}"提供以下信息，用JSON格式返回，字段名必须完全一致：
+- part_of_speech：词性缩写（如 n. / v. / adj. / adv.），如果有多个词性用逗号分隔
+- definition：中文释义，简洁准确，多义词用分号隔开
+- example_en：一句常见的英文例句（难度适合初中生，15词以内）
+- example_zh：上面例句的中文翻译
+
+只返回JSON，不要任何额外文字。`;
+
+        try {
+            const response = await fetch('https://api.deepseek.com/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${DEEPSEEK_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'deepseek-chat',
+                    max_tokens: 200,
+                    temperature: 0.3,
+                    response_format: { type: 'json_object' },
+                    messages: [
+                        { role: 'system', content: '你是英语词汇专家。严格按照用户要求返回JSON，不输出任何其他内容。' },
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            });
+
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content?.trim();
+            let info;
+            try {
+                info = JSON.parse(content);
+            } catch (e) {
+                console.error('word-info JSON parse error:', content);
+                return res.status(500).json({ error: 'AI返回格式错误' });
+            }
+
+            const { part_of_speech = '', definition = '', example_en = '', example_zh = '' } = info;
+            const cachedAt = new Date().toISOString();
+
+            // Save to DB (INSERT OR IGNORE so concurrent requests don't cause errors)
+            db.run(
+                'INSERT OR IGNORE INTO word_definitions (word, part_of_speech, definition, example_en, example_zh, cached_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [word, part_of_speech, definition, example_en, example_zh, cachedAt],
+                (dbErr) => { if (dbErr) console.error('word_definitions insert error:', dbErr); }
+            );
+
+            res.json({ word, part_of_speech, definition, example_en, example_zh, cached: false });
+        } catch (err) {
+            console.error('word-info DeepSeek error:', err);
+            res.status(500).json({ error: '单词信息获取失败' });
+        }
+    });
 });
 
 // Admin login: return a JWT with isAdmin=true and grade='all'

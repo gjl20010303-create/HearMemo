@@ -255,9 +255,14 @@
                         
                         <div id="sprint-meaning-feedback" style="margin-top: 10px; font-size: 14px; min-height: 20px; font-weight: 500;"></div>
 
-                        <button class="btn primary w-full" id="btn-sprint-check-meaning" style="margin-top: 20px; padding: 12px; font-size: 16px;">
-                            <i class="ri-check-line"></i> 确认
-                        </button>
+                        <div style="display:flex; gap:10px; margin-top:20px;">
+                            <button class="btn primary" id="btn-sprint-check-meaning" style="flex:1; padding:12px; font-size:16px;">
+                                <i class="ri-check-line"></i> 确认
+                            </button>
+                            <button class="btn" id="btn-sprint-dont-know" style="flex:0 0 auto; padding:12px 18px; font-size:15px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); border-radius:12px; cursor:pointer; font-family:inherit;">
+                                <i class="ri-close-circle-line"></i> 不会
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Step 2: Form Change Input (Hidden initially) -->
@@ -274,23 +279,99 @@
                         </button>
                     </div>
 
-                    <!-- Etymology Card (词根词缀解析, hidden initially) -->
-                    <div id="etymology-card" style="display:none; margin: 16px auto 0 auto; max-width: 400px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: 14px; padding: 16px; text-align: left;">
-                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                            <span style="font-size:18px;">📚</span>
-                            <strong style="color:#a5b4fc; font-size:15px;">词根词缀解析</strong>
-                            <span id="etymology-loading" style="font-size:12px; color:#818cf8; display:none;"><i class="ri-loader-4-line ri-spin"></i> 分析中</span>
+                    <!-- Word Info Card (词性+意思+例句, hidden initially) -->
+                    <div id="word-info-card" style="display:none; margin: 20px auto 0 auto; max-width: 400px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 14px; padding: 16px; text-align: left;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                            <span style="font-size:18px;">📖</span>
+                            <strong style="color:#6ee7b7; font-size:15px;">单词详解</strong>
+                            <span id="word-info-loading" style="font-size:12px; color:#6ee7b7; display:none;"><i class="ri-loader-4-line ri-spin"></i> 加载中</span>
                         </div>
-                        <div id="etymology-content" style="color:#e2e8f0; font-size:14px; line-height:1.8; white-space: pre-wrap; min-height:20px;"></div>
+                        <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                            <span id="word-info-pos" style="background:rgba(16,185,129,0.25); color:#6ee7b7; font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap;"></span>
+                            <span id="word-info-def" style="color:#e2e8f0; font-size:17px; font-weight:600;"></span>
+                        </div>
+                        <div style="border-top:1px solid rgba(16,185,129,0.2); padding-top:10px;">
+                            <div id="word-info-example-en" style="color:#a7f3d0; font-size:14px; font-style:italic; line-height:1.6; margin-bottom:4px;"></div>
+                            <div id="word-info-example-zh" style="color:#94a3b8; font-size:13px; line-height:1.6;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Etymology Card (词根词缀解析, hidden initially) -->
+                    <div id="etymology-card" style="display:none; margin: 16px auto 0 auto; max-width: 400px; background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); border-radius: 14px; padding: 14px; text-align: left;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                            <span style="font-size:18px;">📚</span>
+                            <strong style="color:#a5b4fc; font-size:15px; letter-spacing:0.3px;">词根词缀解析</strong>
+                            <span id="etymology-loading" style="font-size:12px; color:#818cf8; display:none; margin-left:auto;"><i class="ri-loader-4-line ri-spin"></i> 分析中</span>
+                        </div>
+                        <div id="etymology-content" style="color:#e2e8f0; font-size:13px; line-height:1.8;"></div>
                         <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
-                            <button id="btn-save-etymology" style="background:rgba(99,102,241,0.3); color:#a5b4fc; border:1px solid rgba(99,102,241,0.5); font-size:13px; padding:7px 16px; border-radius:8px; cursor:pointer; font-family:inherit;">✅ 保存到笔记本</button>
-                            <span id="etymology-saved-msg" style="display:none; color:#059669; font-size:13px;">✓ 已保存！</span>
+                            <button id="btn-save-etymology" style="background:rgba(99,102,241,0.2); color:#a5b4fc; border:1px solid rgba(99,102,241,0.4); font-size:12px; padding:6px 14px; border-radius:8px; cursor:pointer; font-family:inherit; transition:all 0.2s;">✅ 保存到笔记本</button>
+                            <span id="etymology-saved-msg" style="display:none; color:#059669; font-size:12px;">✓ 已保存！</span>
                         </div>
                     </div>
 
                     <!-- Next Button (Hidden initially) -->
                     <button class="btn outline w-full" id="btn-sprint-next" style="margin-top: 30px; max-width: 400px; display: none; padding: 12px; font-size: 16px; margin-left: auto; margin-right: auto;">
                         继续下一个 <i class="ri-arrow-right-line"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Grade 5 Translation Practice Page -->
+            <section id="page-grade5-translation" class="page">
+                <div class="dictation-header">
+                    <button class="btn-icon" id="btn-exit-grade5-translation"><i class="ri-arrow-left-line"></i> 退出</button>
+                    <h2 id="grade5-translation-title">课文翻译练习</h2>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="grade5-translation-progress"></div>
+                    </div>
+                </div>
+
+                <div class="dictation-card blur-card" style="max-width:600px; margin:30px auto; padding:28px;">
+                    <div style="text-align:right; font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                        第 <span id="grade5-current-idx">1</span> 题 / 共 <span id="grade5-total-idx">22</span> 题
+                    </div>
+
+                    <!-- Direction badge -->
+                    <div id="grade5-direction-badge" style="display:inline-block; padding:6px 18px; border-radius:20px; font-size:13px; font-weight:600; margin-bottom:16px; background:rgba(99,102,241,0.2); color:#a5b4fc;"></div>
+
+                    <!-- Source sentence -->
+                    <div id="grade5-source-sentence" style="font-size:21px; font-weight:600; color:#e2e8f0; line-height:1.65; padding:18px 22px; background:rgba(255,255,255,0.05); border-radius:16px; margin-bottom:18px; text-align:center;"></div>
+
+                    <!-- Audio button -->
+                    <div style="text-align:center; margin-bottom:18px;">
+                        <button id="btn-grade5-play" class="btn outline" style="font-size:14px; padding:8px 20px;">
+                            <i class="ri-volume-up-line"></i> 朗读
+                        </button>
+                    </div>
+
+                    <!-- Main translation input area -->
+                    <div id="grade5-main-input-area">
+                        <input type="text" id="grade5-translation-input" class="form-input" style="font-size:18px; padding:12px; text-align:center;" placeholder="请输入翻译..." autocomplete="off" spellcheck="false">
+                        <div id="grade5-main-feedback" style="margin-top:10px; font-size:14px; min-height:22px; font-weight:500; text-align:center;"></div>
+                        <div style="display:flex; gap:10px; margin-top:16px;">
+                            <button class="btn primary" id="btn-grade5-check" style="flex:1; padding:12px; font-size:16px;">
+                                <i class="ri-check-line"></i> 确认
+                            </button>
+                            <button id="btn-grade5-skip" style="flex:0 0 auto; padding:12px 18px; font-size:15px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); border-radius:12px; cursor:pointer; font-family:inherit;">
+                                <i class="ri-close-circle-line"></i> 不会
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Follow-up correction area -->
+                    <div id="grade5-followup-area" style="display:none; margin-top:20px; padding:16px 18px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.3); border-radius:14px;">
+                        <p id="grade5-followup-question" style="font-size:15px; color:#fbbf24; font-weight:600; margin-bottom:12px;"></p>
+                        <input type="text" id="grade5-followup-input" class="form-input" style="font-size:17px; padding:10px; text-align:center;" placeholder="请输入答案..." autocomplete="off" spellcheck="false">
+                        <div id="grade5-followup-feedback" style="margin-top:8px; font-size:14px; min-height:20px;"></div>
+                        <button class="btn primary w-full" id="btn-grade5-followup-check" style="margin-top:14px; padding:11px; font-size:15px;">
+                            <i class="ri-check-line"></i> 确认
+                        </button>
+                    </div>
+
+                    <!-- Next button -->
+                    <button class="btn outline w-full" id="btn-grade5-next" style="display:none; margin-top:24px; padding:12px; font-size:16px;">
+                        下一句 <i class="ri-arrow-right-line"></i>
                     </button>
                 </div>
             </section>
@@ -384,6 +465,10 @@
                             <label class="radio-label">
                                 <input type="radio" name="unit-subject" value="zh">
                                 <span>语文 (听写中文)</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="unit-subject" value="grade5-translation">
+                                <span>五年级翻译 (英中互译，句子填 英文=中文)</span>
                             </label>
                         </div>
                     </div>

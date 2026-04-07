@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Customize sprint page text and button for grade 7/8
             const isLowerGrade = ['7', '8'].includes(user.grade);
-            const wordCount = isLowerGrade ? 20 : 50;
+            const wordCount = isLowerGrade ? 30 : 50;
             const btnSprint = document.getElementById('btn-start-sprint');
             if (btnSprint) {
                 btnSprint.innerHTML = `<i class="ri-play-fill"></i> 开始今日冲刺 (${wordCount}词)`;
@@ -118,8 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const descEl = document.getElementById('sprint-desc-text');
             if (descEl) {
                 descEl.textContent = isLowerGrade
-                    ? '每次背 20 个单词，每周建议完成 3 次，轻松打好中考词汇基础。'
-                    : '包含新词与艾宾浩斯错题复习，共计 50 词。采用"看英文写中文意思"以及变形词速记方式。';
+                    ? '每次背 30 个单词，每周建议完成 3 次，轻松打好中考词汇基础。'
+                    : '包含新词与艾宾浩斯错题复习。采用"看英文写中文意思"以及变形词速记方式。';
             }
         }
 
@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 支持 word=meaning[=hint:form] 格式
             const parts = line.split('=');
             const wordObj = {
-                word: parts[0].trim().toLowerCase(),
+                word: parts[0].trim(),
                 meaning: parts[1] ? parts[1].trim() : ''
             };
             if (parts[2]) {
@@ -383,12 +383,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (formParts.length === 2) {
                     wordObj.has_form_change = true;
                     wordObj.form_change_hint = formParts[0].trim();
-                    wordObj.form_change_word = formParts[1].trim().toLowerCase();
+                    wordObj.form_change_word = formParts[1].trim();
                 } else {
                     // fallback if they just typed success=成功=successful
                     wordObj.has_form_change = true;
                     wordObj.form_change_hint = '变形';
-                    wordObj.form_change_word = parts[2].trim().toLowerCase();
+                    wordObj.form_change_word = parts[2].trim();
                 }
             }
             parsedWords.push(wordObj);
@@ -552,18 +552,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const card = document.createElement('div');
             card.className = 'unit-card blur-card';
-            card.innerHTML = `
-                <div class="unit-title">${key}</div>
-                <div class="unit-meta">
-                    <span>${wordList.length} 词</span>
-                    <span><i class="ri-play-circle-line"></i> 点击听写</span>
-                </div>
-            `;
-            card.addEventListener('click', () => {
-                startDictation(key, wordList, false, subject);
-            });
 
-            if (subject === 'en') {
+            if (subject === 'grade5-translation') {
+                card.innerHTML = `
+                    <div class="unit-title">${key}</div>
+                    <div class="unit-meta">
+                        <span>${wordList.length} 句 × 2</span>
+                        <span><i class="ri-translate-2"></i> 点击翻译练习</span>
+                    </div>
+                `;
+                card.addEventListener('click', () => {
+                    startGrade5Translation(key, wordList);
+                });
+            } else {
+                card.innerHTML = `
+                    <div class="unit-title">${key}</div>
+                    <div class="unit-meta">
+                        <span>${wordList.length} 词</span>
+                        <span><i class="ri-play-circle-line"></i> 点击听写</span>
+                    </div>
+                `;
+                card.addEventListener('click', () => {
+                    startDictation(key, wordList, false, subject);
+                });
+            }
+
+            if (subject === 'en' || subject === 'grade5-translation') {
                 unitGridEn.appendChild(card);
                 countEn++;
             } else {
@@ -854,6 +868,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Sprint Mode Logic (Route B) ----
     let sprintList = [];
     let sprintIndex = 0;
+    let currentWordInfo = null;    // API-fetched word info for current sprint word
+    let wordInfoPromise = null;    // Pre-fetch promise, resolved before check_meaning
     
     const pageSprintDictation = document.getElementById('page-sprint-dictation');
     const sprintWordDisplay = document.getElementById('sprint-word-display');
@@ -871,15 +887,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSprintCheckForm = document.getElementById('btn-sprint-check-form');
     
     const btnSprintNext = document.getElementById('btn-sprint-next');
+    const btnSprintDontKnow = document.getElementById('btn-sprint-dont-know');
     const btnExitSprint = document.getElementById('btn-exit-sprint-dictation');
     const btnStartSprint = document.getElementById('btn-start-sprint');
     
     if (btnStartSprint) {
         btnStartSprint.addEventListener('click', async () => {
             try {
-                // Check for a saved checkpoint from today
+                const isLowerGrade = currentUser && ['7', '8'].includes(currentUser.grade);
+                const MAX_SPRINT = isLowerGrade ? 30 : 50;
+
+                // Check for a saved checkpoint from today (discard if word count changed)
                 const cp = loadSprintCheckpoint();
-                if (cp && cp.index > 0 && cp.index < cp.list.length) {
+                if (cp && cp.index > 0 && cp.index < cp.list.length && cp.list.length <= MAX_SPRINT) {
                     const resume = confirm(`上次背到第 ${cp.index} / ${cp.list.length} 词，是否从断点继续？\n\n点【确定】接着背，点【取消】重新开一批新词。`);
                     if (resume) {
                         sprintList = cp.list;
@@ -893,11 +913,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         clearSprintCheckpoint();
                     }
+                } else if (cp) {
+                    clearSprintCheckpoint(); // 词数不匹配，丢弃旧断点
                 }
 
-                // Grade-based session limit: 20 words for grade 7/8, 50 for grade 9
-                const isLowerGrade = currentUser && ['7', '8'].includes(currentUser.grade);
-                const MAX_SPRINT = isLowerGrade ? 20 : 50;
+                // Grade-based session limit: 30 words for grade 7/8, 50 for grade 9
 
                 // Grade 7/8: frequency check (recommend max 3 sessions/week)
                 if (isLowerGrade) {
@@ -905,7 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const todayStr = window.ebbinghaus.formatDate(new Date());
                     const alreadyTodaySession = sessionsThisWeek.includes(todayStr);
                     if (!alreadyTodaySession && sessionsThisWeek.length >= 3) {
-                        const go = confirm(`本周已完成 ${sessionsThisWeek.length} 次背词任务，超出每周推荐的 3 次。\n\n继续也没问题，每次还是只背 20 词。点取消可以先休息一天。`);
+                        const go = confirm(`本周已完成 ${sessionsThisWeek.length} 次背词任务，超出每周推荐的 3 次。\n\n继续也没问题，每次还是只背 30 词。点取消可以先休息一天。`);
                         if (!go) return;
                     }
                 }
@@ -1014,6 +1034,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (sprintStepForm) sprintStepForm.style.display = 'none';
         if (btnSprintNext) btnSprintNext.style.display = 'none';
+        if (btnSprintDontKnow) { btnSprintDontKnow.style.display = 'inline-flex'; btnSprintDontKnow.disabled = false; }
 
         // Reset etymology card for new word
         const etymCard = document.getElementById('etymology-card');
@@ -1024,6 +1045,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (etymSavedMsg) etymSavedMsg.style.display = 'none';
         const btnSaveEtym = document.getElementById('btn-save-etymology');
         if (btnSaveEtym) { btnSaveEtym.disabled = false; btnSaveEtym.style.opacity = '1'; }
+
+        // Reset word-info card and pre-fetch in background
+        const wordInfoCard = document.getElementById('word-info-card');
+        if (wordInfoCard) wordInfoCard.style.display = 'none';
+        currentWordInfo = null;
+        wordInfoPromise = fetch(`/api/word-info?word=${encodeURIComponent(currentWord.word)}`, { headers: authHeaders() })
+            .then(r => r.json())
+            .then(data => { currentWordInfo = data; return data; })
+            .catch(() => null);
 
         setTimeout(() => {
             playSprintAudio();
@@ -1040,23 +1070,29 @@ document.addEventListener('DOMContentLoaded', () => {
             
             btnSprintCheckMeaning.disabled = true;
             btnSprintCheckMeaning.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 校验中...';
+            if (btnSprintDontKnow) btnSprintDontKnow.disabled = true;
 
             try {
+                // Ensure word info is ready before checking meaning
+                const wordInfo = currentWordInfo || await wordInfoPromise;
+                const apiDef = wordInfo?.definition || currentWord.meaning;
+
                 const res = await fetch('/api/check_meaning', {
                     method: 'POST',
                     headers: authHeaders(),
                     body: JSON.stringify({
                         word: currentWord.word,
-                        target_meaning: currentWord.meaning,
+                        target_meaning: apiDef,
                         user_input: inputVal
                     })
                 });
                 const data = await res.json();
                 
                 if (data.result === 'correct') {
-                    sprintMeaningFeedback.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 意思准确！(标准答案: ' + currentWord.meaning + ')</span>';
+                    sprintMeaningFeedback.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 意思准确！(标准答案: ' + apiDef + ')</span>';
                     sprintMeaningInput.disabled = true;
                     btnSprintCheckMeaning.style.display = 'none';
+                    if (btnSprintDontKnow) btnSprintDontKnow.style.display = 'none';
                     
                     if (currentWord.has_form_change) {
                         sprintStepForm.style.display = 'block';
@@ -1065,24 +1101,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         sprintFormInput.disabled = false;
                         sprintFormFeedback.innerHTML = '';
                         btnSprintCheckForm.style.display = 'block';
+                        showWordInfoCard(wordInfo);
                         setTimeout(() => sprintFormInput.focus(), 100);
                     } else {
                         handleSprintResult(currentWord, true);
+                        showWordInfoCard(wordInfo);
                         fetchAndShowEtymology(currentWord);
                         btnSprintNext.style.display = 'block';
                         btnSprintNext.focus();
                     }
                 } else if (data.result === 'fuzzy') {
-                    sprintMeaningFeedback.innerHTML = '<span style="color:#d97706"><i class="ri-error-warning-fill"></i> 意思接近，但是不够准确，请再试一次。(参考: ' + currentWord.meaning + ')</span>';
+                    sprintMeaningFeedback.innerHTML = '<span style="color:#d97706"><i class="ri-error-warning-fill"></i> 意思接近，但是不够准确，请再试一次。(参考: ' + apiDef + ')</span>';
                     sprintMeaningInput.value = '';
                     setTimeout(() => sprintMeaningInput.focus(), 100);
                     btnSprintCheckMeaning.disabled = false;
                     btnSprintCheckMeaning.innerHTML = '<i class="ri-check-line"></i> 确认';
                 } else {
-                    sprintMeaningFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 错误。(标准答案: ' + currentWord.meaning + ')</span>';
+                    sprintMeaningFeedback.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 错误。(标准答案: ' + apiDef + ')</span>';
                     sprintMeaningInput.disabled = true;
                     btnSprintCheckMeaning.style.display = 'none';
+                    if (btnSprintDontKnow) btnSprintDontKnow.style.display = 'none';
                     handleSprintResult(currentWord, false);
+                    showWordInfoCard(wordInfo);
                     fetchAndShowEtymology(currentWord);
                     btnSprintNext.style.display = 'block';
                     btnSprintNext.focus();
@@ -1102,16 +1142,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    if (btnSprintDontKnow) {
+        btnSprintDontKnow.addEventListener('click', async () => {
+            const currentWord = sprintList[sprintIndex];
+
+            btnSprintDontKnow.disabled = true;
+            btnSprintCheckMeaning.disabled = true;
+            btnSprintCheckMeaning.style.display = 'none';
+            if (sprintMeaningInput) sprintMeaningInput.disabled = true;
+
+            // Await pre-fetched word info
+            const wordInfo = currentWordInfo || await wordInfoPromise;
+            const apiDef = wordInfo?.definition || currentWord.meaning;
+
+            sprintMeaningFeedback.innerHTML = `<span style="color:#f87171"><i class="ri-close-circle-fill"></i> 不会。（正确意思：${apiDef}）</span>`;
+
+            handleSprintResult(currentWord, false);
+            showWordInfoCard(wordInfo);
+            fetchAndShowEtymology(currentWord);
+            btnSprintDontKnow.style.display = 'none';
+            btnSprintNext.style.display = 'block';
+            btnSprintNext.focus();
+        });
+    }
+
     if (btnSprintCheckForm) {
         btnSprintCheckForm.addEventListener('click', () => {
             const inputVal = sprintFormInput.value.trim().toLowerCase();
             if (!inputVal) return;
             
             const currentWord = sprintList[sprintIndex];
+            const expectedForm = (currentWord.form_change_word || '').trim().toLowerCase();
             sprintFormInput.disabled = true;
             btnSprintCheckForm.style.display = 'none';
 
-            if (inputVal === currentWord.form_change_word) {
+            if (inputVal === expectedForm) {
                 sprintFormFeedback.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 完全正确！</span>';
                 handleSprintResult(currentWord, true);
             } else {
@@ -1121,6 +1186,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchAndShowEtymology(currentWord);
             btnSprintNext.style.display = 'block';
             btnSprintNext.focus();
+            showWordInfoCard(currentWordInfo);
         });
 
         if (sprintFormInput) {
@@ -1133,19 +1199,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleSprintResult(wordObj, isCorrect) {
         const ebData = window.ebbinghaus.data[wordObj.word];
         const isReview = !!ebData;
+        // Use API-fetched definition for new Ebbinghaus entries; existing entries are untouched
+        const meaningToStore = (currentWordInfo && currentWordInfo.definition) ? currentWordInfo.definition : wordObj.meaning;
 
         if (isCorrect) {
             if (isReview) {
                 window.ebbinghaus.markReviewSuccess(wordObj.word);
             } else {
                 // 新词答对：记入系统但不计错误次数
-                window.ebbinghaus.markNewWordCorrect(wordObj.word, wordObj.meaning, 'en');
+                window.ebbinghaus.markNewWordCorrect(wordObj.word, meaningToStore, 'en');
             }
         } else {
             if (isReview) {
                 window.ebbinghaus.markReviewFail(wordObj.word);
             } else {
-                window.ebbinghaus.addOrUpdateMistake(wordObj.word, wordObj.meaning, 'en');
+                window.ebbinghaus.addOrUpdateMistake(wordObj.word, meaningToStore, 'en');
             }
         }
         renderEbbinghausStats();
@@ -1172,7 +1240,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Etymology (词根词缀) Feature ----
 
+    // Show word-info card with API-fetched data
+    function showWordInfoCard(info) {
+        const card = document.getElementById('word-info-card');
+        if (!card) return;
+        if (!info || info.error) { return; }  // silently skip if API failed
+
+        const posEl = document.getElementById('word-info-pos');
+        const defEl = document.getElementById('word-info-def');
+        const exEnEl = document.getElementById('word-info-example-en');
+        const exZhEl = document.getElementById('word-info-example-zh');
+
+        if (posEl) posEl.textContent = info.part_of_speech || '';
+        if (defEl) defEl.textContent = info.definition || '';
+        if (exEnEl) exEnEl.textContent = info.example_en || '';
+        if (exZhEl) exZhEl.textContent = info.example_zh || '';
+
+        card.style.display = 'block';
+    }
+
     // Fetch etymology from the server and populate/show the card
+    function formatEtymologyText(text) {
+        if (!text) return '<span style="color:#94a3b8;">暂无词根词缀信息</span>';
+
+        // Split by numbered items like "1. ", "2. ", "3. "
+        const items = text.split(/^\d+\.\s+/m).filter(s => s.trim());
+
+        if (items.length <= 1) {
+            // No numbered items, return as-is with better formatting
+            return text
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line)
+                .map(line => `<div style="margin-bottom:8px; line-height:1.6;">${line.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#6ee7b7;">$1</strong>')}</div>`)
+                .join('');
+        }
+
+        // Format as numbered items with cards
+        return items.map((item, idx) => {
+            const trimmed = item.trim();
+            if (!trimmed) return '';
+            const number = idx + 1;
+            const bgColor = ['rgba(99,102,241,0.12)', 'rgba(16,185,129,0.12)', 'rgba(168,85,247,0.12)'][idx % 3];
+            const textColor = ['#a5b4fc', '#6ee7b7', '#d8b4fe'][idx % 3];
+            const lines = trimmed.split('\n').map(line => line.trim()).filter(l => l);
+            const formattedText = lines
+                .map(line => line.replace(/\*\*(.*?)\*\*/g, `<strong style="color:${textColor}; font-weight:700;">$1</strong>`))
+                .join('<br>');
+            return `
+                <div style="background:${bgColor}; border-radius:8px; padding:10px 12px; margin-bottom:8px; border-left:3px solid ${textColor};">
+                    <div style="color:${textColor}; font-weight:700; font-size:13px; margin-bottom:4px;">第 ${number} 点</div>
+                    <div style="color:#e2e8f0; font-size:13px; line-height:1.6;">${formattedText}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
     function fetchAndShowEtymology(wordObj) {
         const card = document.getElementById('etymology-card');
         const loading = document.getElementById('etymology-loading');
@@ -1181,21 +1304,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         card.style.display = 'block';
         if (loading) loading.style.display = 'inline';
-        content.textContent = '';
+        content.innerHTML = '';
 
         fetch(`/api/etymology?word=${encodeURIComponent(wordObj.word)}`)
             .then(r => r.json())
             .then(data => {
                 if (loading) loading.style.display = 'none';
-                content.textContent = data.etymology || '暂无词根词缀信息';
+                const etymologyText = data.etymology || '暂无词根词缀信息';
+                content.innerHTML = formatEtymologyText(etymologyText);
                 // Store current word info on the card for save handler
                 card.dataset.word = wordObj.word;
                 card.dataset.meaning = wordObj.meaning || '';
-                card.dataset.etymology = data.etymology || '';
+                card.dataset.etymology = etymologyText;
             })
             .catch(() => {
                 if (loading) loading.style.display = 'none';
-                content.textContent = '（词根词缀解析暂时不可用）';
+                content.innerHTML = '<span style="color:#94a3b8;">(词根词缀解析暂时不可用)</span>';
             });
     }
 
@@ -1463,5 +1587,344 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // ---- Grade 5 Translation Mode ----
+    let grade5Tasks = [];
+    let grade5Index = 0;
+    let grade5Stats = { correct: 0, total: 0 };
+    let grade5MissedPhrase = null;
+    let grade5MissedPhraseMeaning = null;
+
+    function startGrade5Translation(title, sentenceList) {
+        if (!sentenceList || sentenceList.length === 0) return;
+
+        // Build task list: first pass EN→ZH, second pass ZH→EN (each sentence tested twice)
+        grade5Tasks = [];
+        sentenceList.forEach(s => {
+            grade5Tasks.push({ direction: 'en2zh', sentence_en: s.word, sentence_zh: s.meaning });
+        });
+        sentenceList.forEach(s => {
+            grade5Tasks.push({ direction: 'zh2en', sentence_en: s.word, sentence_zh: s.meaning });
+        });
+        grade5Index = 0;
+        grade5Stats = { correct: 0, total: grade5Tasks.length };
+
+        navLinks.forEach(l => l.classList.remove('active'));
+        pages.forEach(p => p.classList.remove('active'));
+        document.getElementById('page-grade5-translation').classList.add('active');
+
+        document.getElementById('grade5-translation-title').innerText = `翻译练习: ${title}`;
+        document.getElementById('grade5-total-idx').innerText = grade5Tasks.length;
+
+        loadGrade5Task();
+    }
+
+    function loadGrade5Task() {
+        if (grade5Index >= grade5Tasks.length) {
+            finishGrade5Translation();
+            return;
+        }
+
+        const task = grade5Tasks[grade5Index];
+        grade5MissedPhrase = null;
+        grade5MissedPhraseMeaning = null;
+
+        const isEn2Zh = task.direction === 'en2zh';
+        const sourceSentence = isEn2Zh ? task.sentence_en : task.sentence_zh;
+
+        // Progress
+        document.getElementById('grade5-current-idx').innerText = grade5Index + 1;
+        document.getElementById('grade5-translation-progress').style.width =
+            `${(grade5Index / grade5Tasks.length) * 100}%`;
+
+        // Direction badge
+        const badge = document.getElementById('grade5-direction-badge');
+        if (isEn2Zh) {
+            badge.textContent = '第一关：看英文，写中文';
+            badge.style.background = 'rgba(99,102,241,0.2)';
+            badge.style.color = '#a5b4fc';
+        } else {
+            badge.textContent = '第二关：看中文，写英文';
+            badge.style.background = 'rgba(16,185,129,0.2)';
+            badge.style.color = '#6ee7b7';
+        }
+
+        // Source sentence
+        document.getElementById('grade5-source-sentence').textContent = sourceSentence;
+
+        // Reset main input area
+        const translInput = document.getElementById('grade5-translation-input');
+        translInput.value = '';
+        translInput.disabled = false;
+        translInput.placeholder = isEn2Zh ? '请输入中文翻译...' : 'Please type the English translation...';
+
+        document.getElementById('grade5-main-feedback').innerHTML = '';
+        document.getElementById('grade5-main-input-area').style.display = 'block';
+
+        const checkBtn = document.getElementById('btn-grade5-check');
+        checkBtn.style.display = 'inline-flex';
+        checkBtn.disabled = false;
+        checkBtn.innerHTML = '<i class="ri-check-line"></i> 确认';
+
+        const skipBtn = document.getElementById('btn-grade5-skip');
+        skipBtn.style.display = 'inline-flex';
+        skipBtn.disabled = false;
+
+        // Reset follow-up area
+        document.getElementById('grade5-followup-area').style.display = 'none';
+        document.getElementById('grade5-followup-input').value = '';
+        document.getElementById('grade5-followup-feedback').innerHTML = '';
+
+        const followupCheckBtn = document.getElementById('btn-grade5-followup-check');
+        followupCheckBtn.style.display = 'block';
+        followupCheckBtn.disabled = false;
+        followupCheckBtn.innerHTML = '<i class="ri-check-line"></i> 确认';
+
+        document.getElementById('btn-grade5-next').style.display = 'none';
+
+        // Auto-play and focus
+        playGrade5Audio();
+        setTimeout(() => translInput.focus(), 400);
+    }
+
+    function playGrade5Audio() {
+        if (grade5Index >= grade5Tasks.length) return;
+        const task = grade5Tasks[grade5Index];
+        const isEn2Zh = task.direction === 'en2zh';
+        const text = isEn2Zh ? task.sentence_en : task.sentence_zh;
+        const lang = isEn2Zh ? 'en' : 'zh';
+        const url = `/api/tts?text=${encodeURIComponent(text)}&lang=${lang}&_t=${Date.now()}`;
+        const audio = new Audio(url);
+        audio.play().catch(e => console.error('Grade5 TTS error:', e));
+    }
+
+    async function checkGrade5Translation() {
+        const task = grade5Tasks[grade5Index];
+        const translInput = document.getElementById('grade5-translation-input');
+        const userInput = translInput.value.trim();
+        if (!userInput) return;
+
+        const checkBtn = document.getElementById('btn-grade5-check');
+        checkBtn.disabled = true;
+        checkBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 校验中...';
+        document.getElementById('btn-grade5-skip').disabled = true;
+        translInput.disabled = true;
+
+        try {
+            const res = await fetch('/api/check_translation', {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    sentence_en: task.sentence_en,
+                    sentence_zh: task.sentence_zh,
+                    user_input: userInput,
+                    direction: task.direction
+                })
+            });
+            const data = await res.json();
+            const feedbackEl = document.getElementById('grade5-main-feedback');
+
+            if (data.result === 'correct') {
+                feedbackEl.innerHTML = '<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 翻译正确！</span>';
+                grade5Stats.correct++;
+                checkBtn.style.display = 'none';
+                document.getElementById('btn-grade5-skip').style.display = 'none';
+                document.getElementById('btn-grade5-next').style.display = 'block';
+                document.getElementById('btn-grade5-next').focus();
+            } else {
+                if (data.result === 'fuzzy') {
+                    feedbackEl.innerHTML = '<span style="color:#d97706"><i class="ri-error-warning-fill"></i> 翻译还不够完整，来看看漏掉了什么吧</span>';
+                } else {
+                    feedbackEl.innerHTML = '<span style="color:#dc2626"><i class="ri-close-circle-fill"></i> 翻译有误，我们来练习一下关键词</span>';
+                }
+                checkBtn.style.display = 'none';
+                document.getElementById('btn-grade5-skip').style.display = 'none';
+
+                if (data.missed_phrase && data.missed_phrase_meaning) {
+                    grade5MissedPhrase = data.missed_phrase;
+                    grade5MissedPhraseMeaning = data.missed_phrase_meaning;
+                    showGrade5FollowUp(task.direction);
+                } else {
+                    document.getElementById('btn-grade5-next').style.display = 'block';
+                }
+            }
+        } catch (e) {
+            console.error('checkGrade5Translation error:', e);
+            document.getElementById('grade5-main-feedback').innerHTML =
+                '<span style="color:#dc2626">校验失败，请重试</span>';
+            checkBtn.disabled = false;
+            checkBtn.innerHTML = '<i class="ri-check-line"></i> 确认';
+            document.getElementById('btn-grade5-skip').disabled = false;
+            translInput.disabled = false;
+        }
+    }
+
+    function showGrade5FollowUp(direction) {
+        const isEn2Zh = direction === 'en2zh';
+        const followupArea = document.getElementById('grade5-followup-area');
+        const followupQ = document.getElementById('grade5-followup-question');
+        const followupInput = document.getElementById('grade5-followup-input');
+
+        followupArea.style.display = 'block';
+        // Ask about the missed phrase in the target language
+        if (isEn2Zh) {
+            followupQ.textContent = `你知道 "${grade5MissedPhrase}" 是什么意思吗？请用中文回答。`;
+            followupInput.placeholder = '请输入中文意思...';
+        } else {
+            followupQ.textContent = `"${grade5MissedPhrase}" 用英文怎么说？请输入英文答案。`;
+            followupInput.placeholder = 'Type the English...';
+        }
+
+        followupInput.value = '';
+        followupInput.disabled = false;
+        document.getElementById('grade5-followup-feedback').innerHTML = '';
+
+        const followupCheckBtn = document.getElementById('btn-grade5-followup-check');
+        followupCheckBtn.style.display = 'block';
+        followupCheckBtn.disabled = false;
+        followupCheckBtn.innerHTML = '<i class="ri-check-line"></i> 确认';
+
+        setTimeout(() => followupInput.focus(), 100);
+    }
+
+    async function checkGrade5FollowUp() {
+        const followupInput = document.getElementById('grade5-followup-input');
+        const followupFeedback = document.getElementById('grade5-followup-feedback');
+        const followupCheckBtn = document.getElementById('btn-grade5-followup-check');
+        const userInput = followupInput.value.trim();
+        if (!userInput) return;
+
+        followupCheckBtn.disabled = true;
+        followupCheckBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 校验中...';
+        followupInput.disabled = true;
+
+        try {
+            const res = await fetch('/api/check_meaning', {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    word: grade5MissedPhrase,
+                    target_meaning: grade5MissedPhraseMeaning,
+                    user_input: userInput
+                })
+            });
+            const data = await res.json();
+
+            followupCheckBtn.style.display = 'none';
+            if (data.result === 'correct') {
+                followupFeedback.innerHTML =
+                    `<span style="color:#059669"><i class="ri-checkbox-circle-fill"></i> 答对了！"${grade5MissedPhrase}" 就是 "${grade5MissedPhraseMeaning}"，记住了吗？</span>`;
+            } else {
+                followupFeedback.innerHTML =
+                    `<span style="color:#f87171"><i class="ri-close-circle-fill"></i> 还需要记一下："${grade5MissedPhrase}" 的意思是 "${grade5MissedPhraseMeaning}"，下次遇到要认出来哦！</span>`;
+            }
+
+            document.getElementById('btn-grade5-next').style.display = 'block';
+            document.getElementById('btn-grade5-next').focus();
+        } catch (e) {
+            console.error('checkGrade5FollowUp error:', e);
+            followupFeedback.innerHTML = '<span style="color:#dc2626">校验失败，请重试</span>';
+            followupCheckBtn.disabled = false;
+            followupCheckBtn.innerHTML = '<i class="ri-check-line"></i> 确认';
+            followupInput.disabled = false;
+        }
+    }
+
+    async function skipGrade5Task() {
+        const task = grade5Tasks[grade5Index];
+        const isEn2Zh = task.direction === 'en2zh';
+
+        document.getElementById('grade5-translation-input').disabled = true;
+        document.getElementById('btn-grade5-check').style.display = 'none';
+        document.getElementById('btn-grade5-skip').style.display = 'none';
+
+        // Find a missed phrase to ask about by calling the API with empty input
+        const feedbackEl = document.getElementById('grade5-main-feedback');
+        feedbackEl.innerHTML = '<span style="color:#94a3b8">不会没关系，我们来练习关键词</span>';
+
+        try {
+            const res = await fetch('/api/check_translation', {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    sentence_en: task.sentence_en,
+                    sentence_zh: task.sentence_zh,
+                    user_input: '（不会）',
+                    direction: task.direction
+                })
+            });
+            const data = await res.json();
+            if (data.missed_phrase && data.missed_phrase_meaning) {
+                grade5MissedPhrase = data.missed_phrase;
+                grade5MissedPhraseMeaning = data.missed_phrase_meaning;
+                showGrade5FollowUp(task.direction);
+            } else {
+                // Fallback: show reference answer and next button
+                const refAnswer = isEn2Zh ? task.sentence_zh : task.sentence_en;
+                feedbackEl.innerHTML =
+                    `<span style="color:#94a3b8">参考译文：<em style="color:#e2e8f0">${refAnswer}</em></span>`;
+                document.getElementById('btn-grade5-next').style.display = 'block';
+            }
+        } catch (e) {
+            const refAnswer = isEn2Zh ? task.sentence_zh : task.sentence_en;
+            feedbackEl.innerHTML =
+                `<span style="color:#94a3b8">参考译文：<em style="color:#e2e8f0">${refAnswer}</em></span>`;
+            document.getElementById('btn-grade5-next').style.display = 'block';
+        }
+    }
+
+    function finishGrade5Translation() {
+        const total = grade5Stats.total;
+        const correct = grade5Stats.correct;
+        const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+        document.getElementById('idx-total-finished').innerText = total;
+        document.getElementById('idx-correct-count').innerText = correct;
+        document.getElementById('idx-error-count').innerText = total - correct;
+        document.getElementById('result-score').innerText = score;
+        document.getElementById('result-title').innerText = '翻译练习完成！';
+
+        resultModal.classList.add('active');
+    }
+
+    // Wire up Grade 5 translation page buttons
+    const btnGrade5Check = document.getElementById('btn-grade5-check');
+    const btnGrade5Skip = document.getElementById('btn-grade5-skip');
+    const btnGrade5Next = document.getElementById('btn-grade5-next');
+    const btnGrade5Play = document.getElementById('btn-grade5-play');
+    const btnGrade5FollowupCheck = document.getElementById('btn-grade5-followup-check');
+    const btnExitGrade5 = document.getElementById('btn-exit-grade5-translation');
+
+    if (btnGrade5Check) {
+        btnGrade5Check.addEventListener('click', checkGrade5Translation);
+        document.getElementById('grade5-translation-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkGrade5Translation();
+        });
+    }
+    if (btnGrade5Skip) {
+        btnGrade5Skip.addEventListener('click', skipGrade5Task);
+    }
+    if (btnGrade5Next) {
+        btnGrade5Next.addEventListener('click', () => {
+            grade5Index++;
+            loadGrade5Task();
+        });
+    }
+    if (btnGrade5Play) {
+        btnGrade5Play.addEventListener('click', playGrade5Audio);
+    }
+    if (btnGrade5FollowupCheck) {
+        btnGrade5FollowupCheck.addEventListener('click', checkGrade5FollowUp);
+        document.getElementById('grade5-followup-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkGrade5FollowUp();
+        });
+    }
+    if (btnExitGrade5) {
+        btnExitGrade5.addEventListener('click', () => {
+            if (confirm('确定退出翻译练习吗？当前进度不会被保存。')) {
+                navLinks[0].click();
+            }
+        });
+    }
 
 });
