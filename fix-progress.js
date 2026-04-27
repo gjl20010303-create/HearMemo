@@ -26,47 +26,42 @@ db.all("SELECT * FROM units WHERE grade = '9' AND subject = 'en' ORDER BY id ASC
     });
     console.log(`九年级词库共 ${allWords.length} 词`);
 
-    const todayStr = fmt(new Date());
-    const nextStr = fmt(new Date(Date.now() + 2 * 86400000));  // nextReviewDate: 2天后
+    // Lucian 的真实背词记录：
+    //   周三 04-01 背第一天 词1-50（今天04-05，已过2天复习期，列入待复习）
+    //   周六 04-04 背第二天 词51-100（下次复习 04-06，明天）
+    const day1Date = '2026-04-01';  // 周三
+    const day2Date = '2026-04-04';  // 周六
 
-    // ---- 配置：哪个 user_id 调到第几天 ----
+    // 艾宾浩斯间隔: level1 = 2天
+    const day1Next = '2026-04-03';  // 04-01 + 2天 → 已过期，今日待复习
+    const day2Next = '2026-04-06';  // 04-04 + 2天 → 明天复习
+
+    const lucianData = {};
+    allWords.slice(0, 50).forEach(w => {
+        lucianData[w.word] = { word: w.word, meaning: w.meaning || '', subject: 'en',
+            level: 1, nextReviewDate: day1Next, lastReviewDate: day1Date, mistakes: 0 };
+    });
+    allWords.slice(50, 100).forEach(w => {
+        lucianData[w.word] = { word: w.word, meaning: w.meaning || '', subject: 'en',
+            level: 1, nextReviewDate: day2Next, lastReviewDate: day2Date, mistakes: 0 };
+    });
+
     const targets = [
-        { userId: 6, username: 'lucian', seenCount: 100 },  // Day 3 = 已背前100词
-        // 教师 (user_id=0) 清空 → Day 1
-        { userId: 0, username: '教师', seenCount: 0 },
+        { userId: 6, username: 'lucian', data: lucianData },
+        { userId: 0, username: '教师', data: {} },
     ];
 
     let done = 0;
-    targets.forEach(({ userId, username, seenCount }) => {
-        if (seenCount === 0) {
-            db.run('DELETE FROM ebbinghaus WHERE user_id = ?', [userId], err => {
-                if (err) console.error(`${username} 清空失败:`, err);
-                else console.log(`${username} (user_id=${userId}) → 已清空，下次背 Day 1`);
-                if (++done === targets.length) db.close();
-            });
-            return;
-        }
-
-        const seenWords = allWords.slice(0, seenCount);
-        const data = {};
-        seenWords.forEach(w => {
-            data[w.word] = {
-                word: w.word,
-                meaning: w.meaning || '',
-                subject: 'en',
-                level: 1,
-                nextReviewDate: nextStr,
-                lastReviewDate: todayStr,
-                mistakes: 1
-            };
-        });
-
+    targets.forEach(({ userId, username, data }) => {
         db.run(
             'INSERT OR REPLACE INTO ebbinghaus (user_id, data, updated_at) VALUES (?, ?, ?)',
             [userId, JSON.stringify(data), new Date().toISOString()],
             err => {
                 if (err) console.error(`${username} 更新失败:`, err);
-                else console.log(`${username} (user_id=${userId}) → Day ${seenCount / 50 + 1}，已标记前 ${seenCount} 词为已背`);
+                else {
+                    const keys = Object.keys(data).length;
+                    console.log(`${username} (user_id=${userId}) → ${keys} 词已恢复`);
+                }
                 if (++done === targets.length) db.close();
             }
         );

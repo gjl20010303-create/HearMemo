@@ -24,20 +24,20 @@ class EbbinghausManager {
             const res = await fetch('/api/ebbinghaus', {
                 headers: { 'Authorization': `Bearer ${this._authToken}` }
             });
-            if (!res.ok) return;
-            const json = await res.json();
-            if (json.data && Object.keys(json.data).length > 0) {
-                // 服务器有数据 → 以服务器为准
-                this.data = json.data;
-                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
-            } else {
-                // 服务器无数据 → 把本地数据迁移上去
+            if (res.status === 404) {
+                // 服务器没有记录 → 把本地数据迁移上去（首次登录 / 新浏览器迁移）
                 const localData = this.loadData();
                 if (Object.keys(localData).length > 0) {
                     this.data = localData;
                     await this._saveToServer();
                 }
+                return;
             }
+            if (!res.ok) return;
+            const json = await res.json();
+            // 服务器有记录（包括空 {}）→ 以服务器为准，不再读 localStorage
+            this.data = json.data || {};
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
         } catch (e) {
             console.warn('Ebbinghaus: 服务器加载失败，使用本地数据', e);
         }
@@ -90,6 +90,25 @@ class EbbinghausManager {
                 nextReviewDate: this.calculateNextDate(todayStr, 0),
                 lastReviewDate: todayStr,
                 mistakes: 1
+            };
+        }
+        this.saveData();
+    }
+
+    // 新词首次答对（不计错误，从 level 1 开始复习周期）
+    markNewWordCorrect(word, meaning = '', subject = 'en') {
+        const todayStr = this.formatDate(new Date());
+        if (this.data[word]) {
+            // 已存在记录（只更新 meaning/subject，不增加 mistakes）
+            this.data[word].meaning = meaning || this.data[word].meaning;
+            this.data[word].subject = subject;
+        } else {
+            this.data[word] = {
+                word, meaning, subject,
+                level: 1,
+                nextReviewDate: this.calculateNextDate(todayStr, 1),
+                lastReviewDate: todayStr,
+                mistakes: 0
             };
         }
         this.saveData();
