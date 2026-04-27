@@ -161,9 +161,14 @@
                     </div>
                     <h2 style="margin-bottom: 10px; font-size: 24px;">今日冲刺任务</h2>
                     <p id="sprint-desc-text" style="color: #94a3b8; margin-bottom: 30px; max-width: 400px; line-height: 1.6;">包含新词与艾宾浩斯错题复习，共计 50 词。采用"看英文写中文意思"以及变形词速记方式。</p>
-                    <button class="btn primary pulse-animation" id="btn-start-sprint" style="font-size: 18px; padding: 12px 30px; border-radius: 30px;">
-                        <i class="ri-play-fill"></i> 开始今日冲刺 (50词)
-                    </button>
+                    <div id="sprint-action-row" style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+                        <button class="btn primary pulse-animation" id="btn-start-sprint" style="font-size: 18px; padding: 12px 30px; border-radius: 30px;">
+                            <i class="ri-play-fill"></i> 开始今日冲刺 (50词)
+                        </button>
+                        <button class="btn secondary" id="btn-start-sprint-review" style="display:none; font-size: 18px; padding: 12px 30px; border-radius: 30px;">
+                            <i class="ri-calendar-check-line"></i> 复习旧词
+                        </button>
+                    </div>
                     <div id="sprint-stats-display" style="margin-top: 20px; font-size: 14px; color: #64748b;">
                         加载中...
                     </div>

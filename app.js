@@ -108,18 +108,24 @@ document.addEventListener('DOMContentLoaded', () => {
             pages.forEach(p => p.classList.remove('active'));
             if (pageHomeSprint) pageHomeSprint.classList.add('active');
 
-            // Customize sprint page text and button for grade 7/8
+            // Customize sprint page text and buttons by grade
             const isLowerGrade = ['7', '8'].includes(user.grade);
             const wordCount = isLowerGrade ? 30 : 50;
             const btnSprint = document.getElementById('btn-start-sprint');
+            const btnSprintReview = document.getElementById('btn-start-sprint-review');
             if (btnSprint) {
-                btnSprint.innerHTML = `<i class="ri-play-fill"></i> 开始今日冲刺 (${wordCount}词)`;
+                btnSprint.innerHTML = user.grade === '9'
+                    ? '<i class="ri-play-fill"></i> 背新词 50 个'
+                    : `<i class="ri-play-fill"></i> 开始今日冲刺 (${wordCount}词)`;
+            }
+            if (btnSprintReview) {
+                btnSprintReview.style.display = user.grade === '9' ? 'inline-flex' : 'none';
             }
             const descEl = document.getElementById('sprint-desc-text');
             if (descEl) {
-                descEl.textContent = isLowerGrade
-                    ? '每次背 30 个单词，每周建议完成 3 次，轻松打好中考词汇基础。'
-                    : '包含新词与艾宾浩斯错题复习。采用"看英文写中文意思"以及变形词速记方式。';
+                descEl.textContent = user.grade === '9'
+                    ? '新词和复习已分开：可以先背今日新词，旧词复习稍后单独完成。'
+                    : '每次背 30 个单词，每周建议完成 3 次，轻松打好中考词汇基础。';
             }
         }
 
@@ -357,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderUnitGrids();
         populateEditUnitSelect();
+        renderSprintFrequencyNotice();
     }
 
     btnSaveUnit.addEventListener('click', async () => {
@@ -869,6 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Sprint Mode Logic (Route B) ----
     let sprintList = [];
     let sprintIndex = 0;
+    let currentSprintMode = 'mixed';
     let currentWordInfo = null;    // API-fetched word info for current sprint word
     let wordInfoPromise = null;    // Pre-fetch promise, resolved before check_meaning
     
@@ -891,102 +899,136 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSprintDontKnow = document.getElementById('btn-sprint-dont-know');
     const btnExitSprint = document.getElementById('btn-exit-sprint-dictation');
     const btnStartSprint = document.getElementById('btn-start-sprint');
+    const btnStartSprintReview = document.getElementById('btn-start-sprint-review');
     
     if (btnStartSprint) {
-        btnStartSprint.addEventListener('click', async () => {
-            try {
-                const isLowerGrade = currentUser && ['7', '8'].includes(currentUser.grade);
-                const MAX_SPRINT = isLowerGrade ? 30 : 50;
+        btnStartSprint.addEventListener('click', () => {
+            const mode = currentUser && currentUser.grade === '9' ? 'new' : 'mixed';
+            startSprintSession(mode);
+        });
+    }
 
-                // Check for a saved checkpoint from today (discard if word count changed)
-                const cp = loadSprintCheckpoint();
-                if (cp && cp.index >= 0 && cp.index < cp.list.length && cp.list.length <= MAX_SPRINT) {
-                    const resume = confirm(`上次背到第 ${cp.index + 1} / ${cp.list.length} 词，是否从断点继续？\n\n点【确定】接着背，点【取消】重新开一批新词。`);
-                    if (resume) {
-                        sprintList = cp.list;
-                        sprintIndex = cp.index;
-                        const totalEl = document.getElementById('sprint-total-idx');
-                        if (totalEl) totalEl.textContent = sprintList.length;
-                        pages.forEach(p => p.classList.remove('active'));
-                        if (pageSprintDictation) pageSprintDictation.classList.add('active');
-                        loadSprintWord();
-                        return;
-                    } else {
-                        clearSprintCheckpoint();
-                    }
-                } else if (cp) {
-                    clearSprintCheckpoint(); // 词数不匹配，丢弃旧断点
-                }
+    if (btnStartSprintReview) {
+        btnStartSprintReview.addEventListener('click', () => startSprintSession('review'));
+    }
 
-                // Grade-based session limit: 30 words for grade 7/8, 50 for grade 9
+    async function startSprintSession(mode) {
+        try {
+            const isLowerGrade = currentUser && ['7', '8'].includes(currentUser.grade);
+            const MAX_SPRINT = isLowerGrade ? 30 : 50;
 
-                // Grade 7/8: frequency check (recommend max 3 sessions/week)
-                if (isLowerGrade) {
-                    const sessionsThisWeek = getSessionsThisWeek();
-                    const todayStr = window.ebbinghaus.formatDate(new Date());
-                    const alreadyTodaySession = sessionsThisWeek.includes(todayStr);
-                    if (!alreadyTodaySession && sessionsThisWeek.length >= 3) {
-                        const go = confirm(`本周已完成 ${sessionsThisWeek.length} 次背词任务，超出每周推荐的 3 次。\n\n继续也没问题，每次还是只背 30 词。点取消可以先休息一天。`);
-                        if (!go) return;
-                    }
-                }
-
-                // Fetch STRICTLY grade=9 words from the server — SQL level guarantee
-                const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
-                if (!resp.ok) { alert('加载词库失败，请重试'); return; }
-                const grade9Words = await resp.json();
-
-                if (grade9Words.length === 0) {
-                    alert('九年级词库为空！请先以老师身份在词库管理中添加"九年级(大词书)"单词。');
+            const cp = loadSprintCheckpoint(mode);
+            if (cp && cp.index >= 0 && cp.index < cp.list.length && cp.list.length <= MAX_SPRINT) {
+                const resume = confirm(`上次背到第 ${cp.index + 1} / ${cp.list.length} 词，是否从断点继续？\n\n点【确定】接着背，点【取消】重新开一批。`);
+                if (resume) {
+                    currentSprintMode = cp.mode;
+                    sprintList = cp.list;
+                    sprintIndex = cp.index;
+                    showSprintDictationPage();
+                    loadSprintWord();
                     return;
                 }
+                clearSprintCheckpoint(mode);
+            } else if (cp) {
+                clearSprintCheckpoint(mode);
+            }
 
-                // Build a lookup map for enriching review items with form_change info
-                const grade9Map = new Map(grade9Words.map(w => [w.word, w]));
-
-                // Ebbinghaus review: only words that exist in Grade 9 wordbook
-                const reviewItemsRaw = window.ebbinghaus.getTodayReviewList().filter(item => item.subject === 'en');
-                const reviewItems = reviewItemsRaw
-                    .filter(item => grade9Map.has(item.word))
-                    .map(item => ({ ...grade9Map.get(item.word), ...item, ...grade9Map.get(item.word) }));
-
-                // New words = grade9 words not yet seen at all
-                const ebData = window.ebbinghaus.data;
-                const newWords = grade9Words.filter(w => !ebData[w.word]);
-
-                // 新词保持词书顺序（不打乱），复习词随机排列
-                reviewItems.sort(() => Math.random() - 0.5);
-
-                sprintList = [...reviewItems];
-                const needed = MAX_SPRINT - sprintList.length;
-                if (needed > 0) {
-                    sprintList = sprintList.concat(newWords.slice(0, needed));
-                } else if (sprintList.length > MAX_SPRINT) {
-                    sprintList = sprintList.slice(0, MAX_SPRINT);
+            if (isLowerGrade) {
+                const sessionsThisWeek = getSessionsThisWeek();
+                const todayStr = window.ebbinghaus.formatDate(new Date());
+                const alreadyTodaySession = sessionsThisWeek.includes(todayStr);
+                if (!alreadyTodaySession && sessionsThisWeek.length >= 3) {
+                    const go = confirm(`本周已完成 ${sessionsThisWeek.length} 次背词任务，超出每周推荐的 3 次。\n\n继续也没问题，每次还是只背 30 词。点取消可以先休息一天。`);
+                    if (!go) return;
                 }
+            }
 
+            const grade9Words = await fetchSprintWords();
+            if (grade9Words.length === 0) {
+                alert('九年级词库为空！请先以老师身份在词库管理中添加"九年级(大词书)"单词。');
+                return;
+            }
+
+            const allReviewItems = getGrade9ReviewItems(grade9Words);
+            const reviewItems = allReviewItems.slice(0, MAX_SPRINT);
+            const newWords = buildGrade9NewWordBatch(grade9Words, MAX_SPRINT);
+
+            if (mode === 'new') {
+                if (allReviewItems.length > 0) {
+                    const go = confirm(`今天还有 ${allReviewItems.length} 个待复习，可以先背新词，复习稍后完成。\n\n点【确定】继续背新词，点【取消】先不开始。`);
+                    if (!go) return;
+                }
+                sprintList = newWords;
+                if (sprintList.length === 0) {
+                    alert('九年级新词已全部进入记录。可以去“复习旧词”继续巩固。');
+                    return;
+                }
+            } else if (mode === 'review') {
+                sprintList = reviewItems;
+                if (sprintList.length === 0) {
+                    alert('今天没有到期的旧词需要复习。');
+                    return;
+                }
+            } else {
+                sprintList = buildMixedSprintBatch(reviewItems, newWords, MAX_SPRINT);
                 if (sprintList.length === 0) {
                     alert('词库为空或今日已无复习/新词任务！');
                     return;
                 }
-
-                // Record today's sprint session (for grade 7/8 frequency display)
-                recordTodaySession();
-                renderSprintFrequencyNotice();
-
-                sprintIndex = 0;
-                const totalEl = document.getElementById('sprint-total-idx');
-                if (totalEl) totalEl.textContent = sprintList.length;
-
-                pages.forEach(p => p.classList.remove('active'));
-                if (pageSprintDictation) pageSprintDictation.classList.add('active');
-
-                loadSprintWord();
-            } catch (e) {
-                console.error(e);
-                alert('加载失败: ' + e.message);
             }
-        });
+
+            currentSprintMode = mode;
+            sprintIndex = 0;
+            recordTodaySession();
+            renderSprintFrequencyNotice();
+            showSprintDictationPage();
+            loadSprintWord();
+        } catch (e) {
+            console.error(e);
+            alert('加载失败: ' + e.message);
+        }
+    }
+
+    async function fetchSprintWords() {
+        const resp = await fetch('/api/sprint-words', { headers: authHeaders() });
+        if (!resp.ok) throw new Error('加载词库失败，请重试');
+        return await resp.json();
+    }
+
+    function buildGrade9NewWordBatch(grade9Words, limit) {
+        const ebData = window.ebbinghaus.data;
+        return grade9Words
+            .filter(w => !ebData[w.word])
+            .slice(0, limit)
+            .map(w => ({ ...w, __sprintMode: 'new' }));
+    }
+
+    function buildGrade9ReviewBatch(grade9Words, limit) {
+        return getGrade9ReviewItems(grade9Words).slice(0, limit);
+    }
+
+    function getGrade9ReviewItems(grade9Words) {
+        const grade9Map = new Map(grade9Words.map(w => [w.word, w]));
+        return window.ebbinghaus.getTodayReviewList()
+            .filter(item => item.subject === 'en' && grade9Map.has(item.word))
+            .map(item => ({ ...grade9Map.get(item.word), ...item, ...grade9Map.get(item.word), __sprintMode: 'review' }))
+            .sort(() => Math.random() - 0.5);
+    }
+
+    function buildMixedSprintBatch(reviewItems, newWords, limit) {
+        const mixed = [...reviewItems];
+        const needed = limit - mixed.length;
+        if (needed > 0) {
+            mixed.push(...newWords.slice(0, needed).map(w => ({ ...w, __sprintMode: 'new' })));
+        }
+        return mixed.slice(0, limit);
+    }
+
+    function showSprintDictationPage() {
+        const totalEl = document.getElementById('sprint-total-idx');
+        if (totalEl) totalEl.textContent = sprintList.length;
+        pages.forEach(p => p.classList.remove('active'));
+        if (pageSprintDictation) pageSprintDictation.classList.add('active');
     }
 
     function playSprintAudio() {
@@ -1199,7 +1241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleSprintResult(wordObj, isCorrect) {
         const ebData = window.ebbinghaus.data[wordObj.word];
-        const isReview = !!ebData;
+        const isReview = wordObj.__sprintMode === 'review' || (!wordObj.__sprintMode && !!ebData);
         // Use API-fetched definition for new Ebbinghaus entries; existing entries are untouched
         const meaningToStore = (currentWordInfo && currentWordInfo.definition) ? currentWordInfo.definition : wordObj.meaning;
 
@@ -1471,13 +1513,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!statsEl || !currentUser) return;
         const isLowerGrade = ['7', '8'].includes(currentUser.grade);
         const sessions = getSessionsThisWeek();
-        const reviewCount = window.ebbinghaus.getTodayReviewList().filter(i => i.subject === 'en').length;
+        const grade9Words = getLoadedGrade9Words();
+        const grade9WordSet = new Set(grade9Words.map(w => w.word));
+        const reviewCount = window.ebbinghaus.getTodayReviewList().filter(i => {
+            if (i.subject !== 'en') return false;
+            return grade9WordSet.size === 0 || grade9WordSet.has(i.word);
+        }).length;
         if (isLowerGrade) {
             const remaining = Math.max(0, 3 - sessions.length);
             statsEl.innerHTML = `本周已完成 <strong>${sessions.length}</strong> 次 · 本周还剩 <strong>${remaining}</strong> 次推荐任务<br><span style="font-size:12px;">今日待复习 ${reviewCount} 词</span>`;
+        } else if (currentUser.grade === '9') {
+            const seenCount = grade9WordSet.size > 0
+                ? Object.values(window.ebbinghaus.data).filter(i => i.subject === 'en' && grade9WordSet.has(i.word)).length
+                : Object.values(window.ebbinghaus.data).filter(i => i.subject === 'en').length;
+            const totalText = grade9Words.length > 0 ? ` / ${grade9Words.length}` : '';
+            statsEl.innerHTML = `今日待复习 <strong>${reviewCount}</strong> 词<br><span style="font-size:12px;">已记录/已背过 ${seenCount}${totalText} 词</span>`;
         } else {
             statsEl.innerHTML = `今日待复习 <strong>${reviewCount}</strong> 词`;
         }
+    }
+
+    function getLoadedGrade9Words() {
+        const words = [];
+        Object.values(units || {}).forEach(unitObj => {
+            const isArray = Array.isArray(unitObj);
+            const wordList = isArray ? unitObj : unitObj.words;
+            const subject = isArray ? 'en' : (unitObj.subject || 'en');
+            const grade = isArray ? 'all' : (unitObj.grade || 'all');
+            if (grade === '9' && subject === 'en' && Array.isArray(wordList)) {
+                words.push(...wordList);
+            }
+        });
+        return words;
     }
 
     // ---- Sprint Checkpoint (断点续背) ----
@@ -1486,21 +1553,43 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveSprintCheckpoint() {
         if (sprintList.length === 0) return;
         const today = window.ebbinghaus.formatDate(new Date());
-        localStorage.setItem(SPRINT_CHECKPOINT_KEY, JSON.stringify({ date: today, list: sprintList, index: sprintIndex }));
+        localStorage.setItem(getSprintCheckpointKey(currentSprintMode), JSON.stringify({ date: today, mode: currentSprintMode, list: sprintList, index: sprintIndex }));
     }
 
-    function clearSprintCheckpoint() {
-        localStorage.removeItem(SPRINT_CHECKPOINT_KEY);
+    function clearSprintCheckpoint(mode = currentSprintMode) {
+        localStorage.removeItem(getSprintCheckpointKey(mode));
     }
 
-    function loadSprintCheckpoint() {
+    function loadSprintCheckpoint(mode) {
+        clearLegacySprintCheckpoint();
+        const cp = readSprintCheckpoint(mode);
+        if (!cp) return null;
+        const today = window.ebbinghaus.formatDate(new Date());
+        if (cp.date !== today || cp.mode !== mode) {
+            clearSprintCheckpoint(mode);
+            return null;
+        }
+        return cp;
+    }
+
+    function readSprintCheckpoint(mode) {
+        try {
+            const cp = JSON.parse(localStorage.getItem(getSprintCheckpointKey(mode)) || 'null');
+            return cp || null;
+        } catch (e) { return null; }
+    }
+
+    function getSprintCheckpointKey(mode) {
+        return `${SPRINT_CHECKPOINT_KEY}_${mode || 'mixed'}`;
+    }
+
+    function clearLegacySprintCheckpoint() {
         try {
             const cp = JSON.parse(localStorage.getItem(SPRINT_CHECKPOINT_KEY) || 'null');
-            if (!cp) return null;
-            const today = window.ebbinghaus.formatDate(new Date());
-            if (cp.date !== today) { clearSprintCheckpoint(); return null; }
-            return cp;
-        } catch (e) { return null; }
+            if (cp && !cp.mode) localStorage.removeItem(SPRINT_CHECKPOINT_KEY);
+        } catch (e) {
+            localStorage.removeItem(SPRINT_CHECKPOINT_KEY);
+        }
     }
 
     // ── 教师端：学生进度总览 ─────────────────────────────────────────────
